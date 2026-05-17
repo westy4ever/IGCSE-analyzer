@@ -83,11 +83,9 @@
         .eye-icon:hover { color: #4f46e5; }
         .core-panel { border-top: 5px solid #0284c7; border-left: 3px solid #bae6fd; background: linear-gradient(to bottom, #f0f9ff, white); }
         .extended-panel { border-top: 5px solid #ea580c; border-left: 3px solid #fed7aa; background: linear-gradient(to bottom, #fff7ed, white); }
-        .mixed-panel { border-top: 5px solid #7c3aed; border-left: 3px solid #ddd6fe; background: linear-gradient(to bottom, #faf5ff, white); }
-        body.dark-mode .core-panel { background: linear-gradient(to bottom, #1e3a8a, #2d2d2d); border-left-color: #1d4ed8; }
+                body.dark-mode .core-panel { background: linear-gradient(to bottom, #1e3a8a, #2d2d2d); border-left-color: #1d4ed8; }
         body.dark-mode .extended-panel { background: linear-gradient(to bottom, #7c2d12, #2d2d2d); border-left-color: #c2410c; }
-        body.dark-mode .mixed-panel { background: linear-gradient(to bottom, #3b0764, #2d2d2d); border-left-color: #6b21a8; border-top-color: #7c3aed; }
-        .tooltip { position: relative; display: inline-block; cursor: help; }
+                .tooltip { position: relative; display: inline-block; cursor: help; }
         .tooltip .tooltip-text { visibility: hidden; width: 300px; background-color: #1e293b; color: #fff; text-align: left; border-radius: 6px; padding: 8px; position: absolute; z-index: 1; bottom: 125%; left: 50%; margin-left: -150px; opacity: 0; transition: opacity 0.3s; font-size: 11px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); white-space: normal; word-wrap: break-word; }
         .tooltip:hover .tooltip-text { visibility: visible; opacity: 1; }
         .status-ready { color: #10b981; font-weight: bold; }
@@ -158,9 +156,7 @@ RULE: [CORE] if question only tests Core points. [EXTENDED] if question tests an
             return SUBJECT_REFS[subjectKey] || null;
         }
 
-        function getChemistryRef() {
-            return SUBJECT_REFS['cambridge_chemistry_0620'] || '';
-        }
+
 
         function getSubjectLabel(key) {
             return 'Cambridge IGCSE Chemistry 0620';
@@ -727,6 +723,7 @@ RULE: [CORE] if question only tests Core points. [EXTENDED] if question tests an
         const API_MODELS = [
             "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=",
             "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=",
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=",
         ];
         // gemini-2.0-flash family deprecated by Google March 2026 — removed
         // gemini-2.5-flash = stable, best price/performance, free tier supported
@@ -1087,13 +1084,13 @@ RULE: [CORE] if question only tests Core points. [EXTENDED] if question tests an
                         <option value="all">All Questions</option>
                         <option value="Core">🔵 Core</option>
                         <option value="Extended">🟠 Extended</option>
-                        <option value="Core/Extended">🟣 Core/Extended</option>
+                        
                     </select>
                     <button onclick="printReport('exam')" class="text-xs bg-slate-100 px-3 py-1.5 rounded-lg hover:bg-slate-200 transition" title="Print in exam question order">🖨️ Print Exam</button>
                     <button onclick="printReport('topic')" class="text-xs bg-slate-100 px-3 py-1.5 rounded-lg hover:bg-slate-200 transition" title="Print grouped by topic">🖨️ Print Topic</button>
                     <button onclick="downloadTextPDF('exam')" class="text-xs bg-slate-800 text-white px-3 py-1.5 rounded-lg hover:bg-slate-700 transition" title="PDF extract in exam order">📄 PDF Exam</button>
                     <button onclick="downloadTextPDF('topic')" class="text-xs bg-slate-700 text-white px-3 py-1.5 rounded-lg hover:bg-slate-600 transition ml-0" title="PDF extract in topic order">📄 PDF Topic</button>
-                    <button onclick="printStudentReport('exam')" class="text-xs bg-indigo-100 text-indigo-700 px-3 py-1.5 rounded-lg hover:bg-indigo-200 transition" title="Student report in exam order">🎓 Report Exam</button>
+                    <button onclick="printStudentReport('exam')" class="text-xs bg-indigo-100 text-indigo-700 px-3 py-1.5 rounded-lg hover:bg-indigo-200 transition" title="Student report in exam order">🎓 Report (Exam Order)</button>
                     <button onclick="printStudentReport('topic')" class="text-xs bg-violet-100 text-violet-700 px-3 py-1.5 rounded-lg hover:bg-violet-200 transition ml-1" title="Report grouped by syllabus topic">🎓 Report (Topic Order)</button>
             </div>
 
@@ -1291,8 +1288,8 @@ RULE: [CORE] if question only tests Core points. [EXTENDED] if question tests an
 
         function updateStudyGuide() {
             if (!currentResults.length) return;
-            const core = currentResults.filter(q => (q.currType === 'Core' || q.currType === 'Core/Extended') && q.syllabusStatus !== 'removed');
-            const ext  = currentResults.filter(q => (q.currType === 'Extended' || q.currType === 'Core/Extended') && q.syllabusStatus !== 'removed');
+            const core = currentResults.filter(q => (q.currType === 'Core' || false /* Mixed removed */) && q.syllabusStatus !== 'removed');
+            const ext  = currentResults.filter(q => (q.currType === 'Extended' || false /* Mixed removed */) && q.syllabusStatus !== 'removed');
             const rem  = currentResults.filter(q => q.syllabusStatus === 'removed');
             const makeSpan = (q, color) => `<span class="bg-${color}-100 text-${color}-800 px-2 py-1 rounded text-[10px]">${q.qID}</span>`;
             const cl = document.getElementById('core-questions-list');
@@ -1600,7 +1597,9 @@ RULE: [CORE] if question only tests Core points. [EXTENDED] if question tests an
                         const reason = result?.candidates?.[0]?.finishReason;
                         if (reason === 'MAX_TOKENS') {
                             const tokensUsed = result?.usageMetadata?.totalTokenCount || '?';
-                            throw new Error(`⚠️ Response truncated (MAX_TOKENS at ${tokensUsed} tokens).\n\nGemini hit the output limit mid-response — the JSON or text is incomplete.\n\n💡 This paper may be too long for a single request. Try:\n• Uploading fewer questions (split the paper)\n• Switching to gemini-2.5-flash-lite (faster, higher rate limit)`);
+                            console.warn(`[API] MAX_TOKENS at ${tokensUsed} tokens — attempting to use partial response`);
+                            // Return the partial result and let sanitiseJSON close the truncated JSON
+                            return result;
                         }
                         return result;
                     }
@@ -1613,6 +1612,25 @@ RULE: [CORE] if question only tests Core points. [EXTENDED] if question tests an
                         // Wait longer before trying next model on quota errors
                         await new Promise(r => setTimeout(r, 5000));
                     } else if (response.status === 503) {
+                        // Retry same model once after 8s before moving to next
+                        console.warn(`[API] 503 on ${modelName} — retrying in 8s`);
+                        await new Promise(r => setTimeout(r, 8000));
+                        try {
+                            const retry = await fetchWithTimeout(API_MODELS[i] + apiKey, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify(payload)
+                            }, timeoutMs);
+                            if (retry.ok) {
+                                const retryResult = await retry.json();
+                                const retryReason = retryResult?.candidates?.[0]?.finishReason;
+                                if (retryReason === 'MAX_TOKENS') {
+                                    console.warn('[API] MAX_TOKENS on retry — using partial response');
+                                    return retryResult;
+                                }
+                                return retryResult;
+                            }
+                        } catch (retryErr) { /* fall through */ }
                         errors.push(`🔄 ${modelName}: Server overloaded — try again in a few minutes`);
                     } else if (response.status === 400) {
                         errors.push(`⚠️ ${modelName}: Bad request — ${msg.substring(0, 60)}`);
@@ -1641,7 +1659,7 @@ RULE: [CORE] if question only tests Core points. [EXTENDED] if question tests an
             const paper    = currentPaperCode || subject || 'Paper';
             const unitFilter = getReportUnitFilter ? getReportUnitFilter() : 'all';
             const baseData = (typeof applyUnitFilter === 'function') ? applyUnitFilter(currentResults, unitFilter) : [...currentResults];
-            const safe     = buildReportFilename(paper, 'Editable', 'exam', unitFilter);
+            const safe     = (paper||'Paper').replace(/[\/\s]/g,'_') + '_Editable_exam_' + (unitFilterSuffix(unitFilter)||'all');
 
             // Serialise question data — strip raw HTML blobs to clean text for portability
             const qData = baseData.map(q => ({
@@ -1705,7 +1723,6 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#f1f5f9;color:#1e293b;fo
 .badge{display:inline-block;font-size:9px;font-weight:800;padding:2px 8px;border-radius:4px;text-transform:uppercase}
 .badge-core{background:#dbeafe;color:#1d4ed8}
 .badge-ext{background:#ffedd5;color:#c2410c}
-.badge-ce{background:#ede9fe;color:#6d28d9}
 .badge-rem{background:#fee2e2;color:#991b1b}
 .badge-diff-easy{background:#d1fae5;color:#065f46}
 .badge-diff-med{background:#fef3c7;color:#92400e}
@@ -1726,10 +1743,10 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#f1f5f9;color:#1e293b;fo
     <option value="all" style="background:#1e293b">All Questions</option>
     <option value="Core" style="background:#1e293b">🔵 Core</option>
     <option value="Extended" style="background:#1e293b">🟠 Extended</option>
-    <option value="Core/Extended" style="background:#1e293b">🟣 Core/Extended</option>
+    
   </select>
-  <button class="btn btn-indigo" onclick="runStudentReport('exam')">🎓 Report Exam</button>
-  <button class="btn btn-violet" onclick="runStudentReport('topic')">🎓 Report Topic</button>
+  <button class="btn btn-indigo" onclick="runStudentReport('exam')">🎓 Report (Exam Order)</button>
+  <button class="btn btn-violet" onclick="runStudentReport('topic')">🎓 Report (Topic Order)</button>
   <button class="btn btn-slate" onclick="runPrintReport('exam')">🖨️ Print Exam</button>
   <button class="btn btn-slate" onclick="runPrintReport('topic')">🖨️ Print Topic</button>
   <button class="btn btn-pdf" onclick="runPDF('exam')">📄 PDF Exam</button>
@@ -1751,10 +1768,8 @@ const FIELD_META = {
   ms:             { label:'Mark Scheme',          color:'#0284c7', emoji:'✅' },
   model:          { label:'Model Answer',         color:'#4f46e5', emoji:'🏆' },
   explanation:    { label:'Concept Explanation',  color:'#0891b2', emoji:'📖' },
-  commonMistakes: { label:'Common Mistakes',      color:'#dc2626', emoji:'⚠️' },
-  examTips:       { label:'Exam Tips',            color:'#059669', emoji:'💡' },
+
   feedback:       { label:'Feedback / Comments',  color:'#d97706', emoji:'💬' },
-  tutorNote:      { label:'Tutor Note',           color:'#6d28d9', emoji:'🎓' },
 };
 const EDITABLE_FIELDS = Object.keys(FIELD_META);
 
@@ -1767,11 +1782,11 @@ function renderCards() {
   let lastTopic = null;
 
   qData.forEach((q, qi) => {
-    const isCore = q.currType === 'Core' || q.currType === 'Core/Extended';
-    const isExt  = q.currType === 'Extended' || q.currType === 'Core/Extended';
-    const accent = q.currType === 'Core/Extended' ? '#7c3aed' : isCore ? '#0284c7' : '#ea580c';
-    const accentBg = q.currType === 'Core/Extended' ? '#f5f3ff' : isCore ? '#eff6ff' : '#fff7ed';
-    const typeBadge = q.currType === 'Core/Extended'
+    const isCore = q.currType === 'Core' || false /* Mixed removed */;
+    const isExt  = q.currType === 'Extended' || false /* Mixed removed */;
+    const accent = false /* Mixed removed */ ? '#7c3aed' : isCore ? '#0284c7' : '#ea580c';
+    const accentBg = false /* Mixed removed */ ? '#f5f3ff' : isCore ? '#eff6ff' : '#fff7ed';
+    const typeBadge = false /* Mixed removed */
       ? '<span class="badge badge-ce">Core/Extended</span>'
       : isCore ? '<span class="badge badge-core">Core</span>'
       : '<span class="badge badge-ext">Extended</span>';
@@ -1811,7 +1826,7 @@ function renderCards() {
           <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center">
             \${typeBadge} \${diffBadge}
             \${tName ? \`<span class="badge" style="background:#e0e7ff;color:#3730a3;cursor:text;border:1px dashed transparent" contenteditable="true" title="Click to edit topic" data-qi="\${qi}" data-field="topic" oninput="onEditPill(this,\${qi},'topic')" onfocus="this.style.borderColor='#6366f1'" onblur="this.style.borderColor='transparent'">\${tName}</span>\` : ''}
-            \${q.subTopic ? \`<span class="badge" style="background:#f1f5f9;color:#64748b;cursor:text;border:1px dashed transparent" contenteditable="true" title="Click to edit subtopic (e.g. 5.1 Acids)" data-qi="\${qi}" data-field="subTopic" oninput="onEditPill(this,\${qi},'subTopic')" onfocus="this.style.borderColor='#6366f1'" onblur="this.style.borderColor='transparent'">\${esc(q.subTopic)}</span>\` : \`<span class="badge" style="background:#f1f5f9;color:#9ca3af;cursor:text;border:1px dashed #d1d5db" contenteditable="true" title="Click to add subtopic" data-qi="\${qi}" data-field="subTopic" oninput="onEditPill(this,\${qi},'subTopic')">+ subtopic</span>\`}
+            \${q.subTopic ? \`<span class="badge" style="background:#f1f5f9;color:#64748b;cursor:text;border:1px dashed transparent" contenteditable="true" title="Click to edit subtopic (e.g. 13.1 Excretion)" data-qi="\${qi}" data-field="subTopic" oninput="onEditPill(this,\${qi},'subTopic')" onfocus="this.style.borderColor='#6366f1'" onblur="this.style.borderColor='transparent'">\${esc(q.subTopic)}</span>\` : \`<span class="badge" style="background:#f1f5f9;color:#9ca3af;cursor:text;border:1px dashed #d1d5db" contenteditable="true" title="Click to add subtopic" data-qi="\${qi}" data-field="subTopic" oninput="onEditPill(this,\${qi},'subTopic')">+ subtopic</span>\`}
           </div>
         </div>
         <span style="font-size:10px;color:#94a3b8">\${qi+1}/\${qData.length}</span>
@@ -1836,14 +1851,16 @@ function onEdit(el, qi, field) {
   _saveTimer = setTimeout(flashSaved, 800);
 }
 
-// ── Pill edit handler — updates topic/subtopic ─────────────────────────
+// ── Pill edit handler — updates topic/subtopic and syncs summary table ─
 function onEditPill(el, qi, field) {
   const txt = el.innerText.trim();
   if (field === 'topic') {
     qData[qi].topic = txt;
+    // Try to update subtopicId major number if user types e.g. "Topic 13. Excretion"
     const m = txt.match(/(\d+)/);
     if (m) { const n = parseInt(m[1]); if (n && TOPIC_NAMES[n]) { qData[qi].subtopicId = (qData[qi].subtopicId||'').replace(/^\d+/, String(n)); } }
   } else if (field === 'subTopic') {
+    // Support "13.1 Excretion definition" format
     const m = txt.match(/^(\d+\.\d+)\s*(.*)/);
     if (m) { qData[qi].subtopicId = m[1]; qData[qi].subTopic = m[2] || txt; }
     else { qData[qi].subTopic = txt; }
@@ -1908,14 +1925,20 @@ function getUnitSuffix() {
   return v.replace(/[\s\/]/g,'');
 }
 function buildFilename(sortMode, reportType) {
-  const safe = PAPER_CODE ? PAPER_CODE.replace(/[\/\\\s]/g,'_') : PAPER.replace(/[\/\\\s]/g,'_');
+  const safe = PAPER_CODE ? PAPER_CODE.replace(/[\\/\s]/g,'_') : PAPER.replace(/[\\/\s]/g,'_');
   const sort = sortMode === 'topic' ? 'Topic_Order' : 'Exam_Order';
   return \`\${safe}_\${reportType}_\${sort}_\${getUnitSuffix()}\`;
 }
 
 function rndr(s) {
   if (!s) return '';
-  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\\*\\*(.*?)\\*\\*/g,'<b>$1</b>').replace(/\\n/g,'<br>');
+  if (new RegExp('<(span|div|table|p|em|strong|br)\\b','i').test(s)) {
+    return s.replace(new RegExp('<script\\b[^>]*>[^]*?<\\/script>','gi'),'')
+            .replace(new RegExp('on\\w+="[^"]*"','gi'),'');
+  }
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+          .replace(new RegExp('\\*\\*(.*?)\\*\\*','g'),'<b>$1</b>')
+          .split('\n').join('<br>');
 }
 
 function section(icon, label, body, color, bg) {
@@ -1936,7 +1959,7 @@ function runStudentReport(sortMode) {
   let rows = '';
   data.forEach(q => {
     const isCore = q.currType==='Core'||q.currType==='Core/Extended';
-    const accent = q.currType==='Core/Extended'?'#7c3aed':isCore?'#0284c7':'#ea580c';
+    const accent = isCore?'#0284c7':'#ea580c';
     const accentLight = q.currType==='Core/Extended'?'#f5f3ff':isCore?'#eff6ff':'#fff7ed';
     const typeLabel = q.currType==='Core/Extended'?'CORE/EXTENDED':isCore?'CORE':'EXTENDED';
     const tNum2 = q.subtopicId ? parseInt(q.subtopicId.split('.')[0]) : 0;
@@ -1971,11 +1994,8 @@ function runStudentReport(sortMode) {
         \${msLines ? \`<div style="margin-bottom:12px"><div style="font-size:8.5px;font-weight:800;color:#0284c7;text-transform:uppercase;margin-bottom:6px">✅ Mark Scheme</div>\${msLines}</div>\` : ''}
         \${section('🏆','Model Answer', q.model, '#4f46e5', '#eef2ff')}
         \${section('📖','Concept Explanation', q.explanation, '#0891b2', '#ecfeff')}
-        \${section('⚠️','Common Mistakes', q.commonMistakes, '#dc2626', '#fff1f2')}
-        \${section('💡','Exam Tips', q.examTips, '#059669', '#f0fdf4')}
-        \${section('💬','Feedback', q.feedback, '#d97706', '#fffbeb')}
-        \${section('🎓','Tutor Note', q.tutorNote, '#6d28d9', '#f5f3ff')}
-      </div>
+                \${section('💬','Feedback', q.feedback, '#d97706', '#fffbeb')}
+              </div>
     </div>\`;
   });
 
@@ -1990,7 +2010,6 @@ function runStudentReport(sortMode) {
 <div class="no-print" style="background:#1e293b;color:white;padding:10px 20px;border-radius:8px;margin-bottom:20px;display:flex;gap:8px;align-items:center">
   <strong style="font-size:13px">\${PAPER} — Student Report (\${sortMode==='topic'?'Topic Order':'Exam Order'})</strong>
   <div style="margin-left:auto;display:flex;gap:6px">
-    <button onclick="(function(){const b=new Blob([document.documentElement.outerHTML],{type:'text/html'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='\${_fname}.html';a.click();URL.revokeObjectURL(a.href);})()" style="background:#16a34a;color:white;border:none;padding:6px 14px;border-radius:6px;cursor:pointer;font-weight:700;font-size:11px">💾 Save HTML</button>
     <button onclick="window.print()" style="background:#4f46e5;color:white;border:none;padding:6px 16px;border-radius:6px;cursor:pointer;font-weight:700;font-size:11px">🖨️ Print / Save PDF</button>
   </div>
 </div>
@@ -2012,7 +2031,7 @@ function runPrintReport(sortMode) {
   let rows = '';
   data.forEach(q => {
     const isCore = q.currType==='Core'||q.currType==='Core/Extended';
-    const accent = q.currType==='Core/Extended'?'#7c3aed':isCore?'#0284c7':'#ea580c';
+    const accent = isCore?'#0284c7':'#ea580c';
     const typeLabel = q.currType==='Core/Extended'?'CORE/EXTENDED':isCore?'CORE':'EXTENDED';
     const tNum2 = q.subtopicId ? parseInt(q.subtopicId.split('.')[0]) : 0;
     const tName2 = (tNum2 && TOPIC_NAMES[tNum2]) ? TOPIC_NAMES[tNum2] : (q.topic||'');
@@ -2030,11 +2049,8 @@ function runPrintReport(sortMode) {
         \${section('✅','Mark Scheme', q.ms, '#0284c7', '#eff6ff')}
         \${section('🏆','Model Answer', q.model, '#4f46e5', '#eef2ff')}
         \${section('📖','Explanation', q.explanation, '#0891b2', '#ecfeff')}
-        \${section('⚠️','Common Mistakes', q.commonMistakes, '#dc2626', '#fff1f2')}
-        \${section('💡','Exam Tips', q.examTips, '#059669', '#f0fdf4')}
-        \${section('💬','Feedback', q.feedback, '#d97706', '#fffbeb')}
-        \${section('🎓','Tutor Note', q.tutorNote, '#6d28d9', '#f5f3ff')}
-      </div>
+                \${section('💬','Feedback', q.feedback, '#d97706', '#fffbeb')}
+              </div>
     </div>\`;
   });
 
@@ -2048,7 +2064,6 @@ div[style*="break-inside:avoid"]{break-inside:avoid!important;page-break-inside:
 <div class="no-print" style="background:#1e293b;color:white;padding:10px 20px;border-radius:8px;margin-bottom:20px;display:flex;gap:8px;align-items:center">
   <strong>\${PAPER} · Print Report · \${sortMode==='topic'?'Topic Order':'Exam Order'}</strong>
   <div style="margin-left:auto;display:flex;gap:6px">
-    <button onclick="(function(){const b=new Blob([document.documentElement.outerHTML],{type:'text/html'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='\${_pfname}.html';a.click();URL.revokeObjectURL(a.href);})()" style="background:#16a34a;color:white;border:none;padding:6px 14px;border-radius:6px;cursor:pointer;font-weight:700;font-size:11px">💾 Save HTML</button>
     <button onclick="window.print()" style="background:#4f46e5;color:white;border:none;padding:6px 16px;border-radius:6px;cursor:pointer;font-weight:700;font-size:11px">🖨️ Print</button>
   </div>
 </div>
@@ -2118,8 +2133,6 @@ function runPDF(sortMode) {
     addSec('Mark Scheme:',     q.ms,             [2,132,199], [30,64,175]);
     addSec('Model Answer:',    q.model,          [79,70,229], [79,70,229]);
     addSec('Explanation:',     q.explanation,    [8,145,178], [8,145,178]);
-    addSec('Common Mistakes:', q.commonMistakes, [185,28,28], [185,28,28]);
-    addSec('Exam Tips:',       q.examTips,       [5,150,105], [5,150,105]);
     addSec('Feedback:',        q.feedback,       [100,116,139],[100,116,139]);
     addSec('Tutor Note:',      q.tutorNote,      [109,40,217],[109,40,217]);
   });
@@ -2150,7 +2163,7 @@ renderCards();
             if (!currentResults.length) return;
             let csv = 'Topic,Question ID,Core/Extended,Marks,Difficulty,Status,Question Text\n';
             currentResults.forEach(q => { csv += `"${q.topic}","${q.qID}","${q.currType}",${q.marks},"${q.difficulty||'Medium'}","${q.syllabusStatus||'current'}","${q.text.replace(/"/g,'""')}"\n`; });
-            const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(new Blob([csv],{type:'text/csv'})), download: `igcse_study_guide_${Date.now()}.csv` });
+            const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(new Blob([csv],{type:'text/csv'})), download: `${(currentPaperCode||'Paper').replace(/[\/\s]/g,'_')}_Questions.csv` });
             document.body.appendChild(a); a.click(); setTimeout(()=>{ document.body.removeChild(a); URL.revokeObjectURL(a.href); }, 100);
         }
 
@@ -2206,6 +2219,37 @@ renderCards();
                             out += '\n';
                         } else if (child.nodeName === 'B' || child.nodeName === 'STRONG') {
                             out += '<b>' + walk(child) + '</b>';
+                        } else if (child.nodeName === 'TABLE') {
+                            // Convert HTML table to plain-text grid for print/PDF
+                            const rows = child.querySelectorAll('tr');
+                            const colWidths = [];
+                            const grid = [];
+                            rows.forEach(function(row) {
+                                const cells = Array.from(row.querySelectorAll('th,td')).map(function(cell) {
+                                    return cell.textContent.trim();
+                                });
+                                cells.forEach(function(cell, i) {
+                                    colWidths[i] = Math.max(colWidths[i] || 0, cell.length);
+                                });
+                                grid.push(cells);
+                            });
+                            if (grid.length) {
+                                const sep = '+' + colWidths.map(function(w) { return '-'.repeat(w+2); }).join('+') + '+';
+                                out += '\n' + sep + '\n';
+                                grid.forEach(function(row, ri) {
+                                    out += '| ' + row.map(function(cell, i) {
+                                        return cell + ' '.repeat(Math.max(0, colWidths[i]-cell.length));
+                                    }).join(' | ') + ' |\n';
+                                    if (ri === 0) out += sep + '\n';
+                                });
+                                out += sep + '\n';
+                            }
+                        } else if (child.classList && child.classList.contains('q-ans-line')) {
+                            out += '\n______________________________';
+                        } else if (child.classList && child.classList.contains('q-fig')) {
+                            out += '\n[' + child.textContent.trim() + ']\n';
+                        } else if (child.nodeName === 'EM' || child.nodeName === 'I') {
+                            out += '<i>' + walk(child) + '</i>';
                         } else {
                             out += walk(child);
                         }
@@ -2244,9 +2288,6 @@ renderCards();
         }
         // Clean text for PDF — strip HTML, fix LaTeX formulas, fix separators, preserve newlines
         function cleanForPDF(text) {
-            if (!s) return '';
-            s = s.replace(/\/\//g, ' ');
-
             if (!text) return '';
             return text
                 .replace(/<br\s*\/?>/gi, '\n')
@@ -2277,7 +2318,7 @@ renderCards();
             const flaggedOnly = currentResults.filter(q => q.flagged);
             let data = flaggedOnly.length ? [...flaggedOnly] : applyUnitFilter([...currentResults], unitFilter);
             const flagNote = flaggedOnly.length
-                ? `<p style="font-size:11px;color:#7c3aed;margin:6px 0 0">⚑ Showing ${flaggedOnly.length} flagged question(s) only</p>` : '';
+                ? `<p style="font-size:11px;color:#64748b;margin:6px 0 0">⚑ Showing ${flaggedOnly.length} flagged question(s) only</p>` : '';
 
             // ── Sort ──────────────────────────────────────────────────────────
             if (sortMode === 'topic') {
@@ -2389,7 +2430,7 @@ renderCards();
             data.forEach(q => {
                 const isCore  = q.currType==='Core'||q.currType==='Core/Extended';
                 const isExt   = q.currType==='Extended'||q.currType==='Core/Extended';
-                const accent  = q.currType==='Core/Extended' ? '#7c3aed' : isCore ? '#0284c7' : '#ea580c';
+                const accent  = isCore ? '#0284c7' : '#ea580c';
                 const accentLight = q.currType==='Core/Extended' ? '#f5f3ff' : isCore ? '#eff6ff' : '#fff7ed';
                 const typeLabel = q.currType==='Core/Extended'?'CORE/EXTENDED':isCore?'CORE':'EXTENDED';
                 const diffBg  = q.difficulty==='Easy'?'#d1fae5':q.difficulty==='Hard'?'#fee2e2':'#fef3c7';
@@ -2457,7 +2498,7 @@ renderCards();
                             ${cleanFieldForReport(q.text)}
                         </div>
                         <!-- Mark Scheme -->
-                        <div style="margin-bottom:${q.model||q.explanation||q.commonMistakes||q.teacherNotes?'12px':'0'}">
+                        <div style="margin-bottom:${q.model||q.explanation||q.teacherNotes?'12px':'0'}">
                             <div style="font-size:8.5px;font-weight:800;color:#0284c7;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:5px">✅ Mark Scheme</div>
                             ${msHtml || '<div style="font-size:10px;color:#94a3b8;font-style:italic">No mark scheme</div>'}
                         </div>
@@ -2472,10 +2513,7 @@ renderCards();
                             <div style="font-size:10.5px;color:#1e293b;line-height:1.7">${q.explanation}</div>
                         </div>` : ''}
                         <!-- Common Mistakes -->
-                        ${q.commonMistakes ? `<div style="border-top:1px solid #e2e8f0;padding-top:10px;margin-bottom:10px;background:#fff7ed;border-left:3px solid #f97316;padding-left:10px;border-radius:0 5px 5px 0">
-                            <div style="font-size:8.5px;font-weight:800;color:#ea580c;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px">⚠️ Common Mistakes</div>
-                            <div style="font-size:10.5px;color:#7c2d12;line-height:1.7">${q.commonMistakes}</div>
-                        </div>` : ''}
+
                         <!-- Step-by-Step -->
 
                         <!-- Tutor / Teacher Notes -->
@@ -2519,7 +2557,6 @@ renderCards();
                     <div class="no-print" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;padding:10px 14px;background:white;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,0.1)">
                         <span style="font-size:12px;font-weight:700;color:#475569">${paper} · ${data.length} questions · ${sortLabel}</span>
                         <div style="display:flex;gap:6px">
-                          <button onclick="(function(){const b=new Blob([document.documentElement.outerHTML],{type:'text/html'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='${safe}.html';a.click();URL.revokeObjectURL(a.href);})()" style="background:#16a34a;color:white;border:none;padding:7px 14px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">💾 Save HTML</button>
                           <button onclick="window.print()" style="background:#1e293b;color:white;border:none;padding:7px 16px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">🖨️ Print / Save PDF</button>
                         </div>
                     </div>
@@ -2638,7 +2675,7 @@ renderCards();
                             </div>
                             <div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end;align-items:center;flex-shrink:0">
                                 <span style="background:${accent};color:white;font-size:9px;font-weight:700;padding:2px 8px;border-radius:99px">${typeLabel}</span>
-                                <span style="background:#f3e8ff;color:#7c3aed;font-size:9px;font-weight:700;padding:2px 8px;border-radius:99px">${q.marks||'?'} marks</span>
+                                <span style="background:#e0f2fe;color:#0369a1;font-size:9px;font-weight:700;padding:2px 8px;border-radius:99px">${q.marks||'?'} marks</span>
                                 <span style="font-size:9px;color:#94a3b8">${i+1}/${currentResults.length}</span>
                             </div>
                         </div>
@@ -2649,11 +2686,8 @@ renderCards();
                         ${section('🏆','Model Answer', q.model, '#4f46e5', '#eef2ff')}
                         ${section('📖','Concept Explanation', q.explanation, '#0891b2', '#ecfeff')}
                         
-                        ${section('⚠️','Common Mistakes', q.commonMistakes, '#dc2626', '#fff1f2')}
-                        ${section('💡','Exam Tips', q.examTips, '#059669', '#f0fdf4')}
-                        ${section('💬','Examiner Feedback / Teacher Comment', q.feedback, '#d97706', '#fffbeb')}
-                        ${section('🎓','Tutor Note', q.tutorNote, '#6d28d9', '#f5f3ff')}
-                        ${isRem?section('🚫','REMOVED — Do Not Study','This topic was removed from the 2026-2028 Cambridge IGCSE Biology syllabus.','#dc2626','#fff1f2'):''}
+                                            ${section('💬','Examiner Feedback / Teacher Comment', q.feedback, '#d97706', '#fffbeb')}
+                                            ${isRem?section('🚫','REMOVED — Do Not Study','This topic was removed from the 2026-2028 Cambridge IGCSE Biology syllabus.','#dc2626','#fff1f2'):''}
                     </div>
                 </div>`;
             }).join('');
@@ -2671,39 +2705,62 @@ renderCards();
     .qcard *{break-inside:avoid!important;page-break-inside:avoid!important}
     @page{margin:12mm 14mm;size:A4}
   }
-
         [contenteditable="true"]:hover { background-color: rgba(99,102,241,0.04); cursor: text; }
         [contenteditable="true"]:focus { background-color: #fff; }
-        /* Question text images: flex row but forced onto new line below text */
         [data-field="text"] .img-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; clear: both; width: 100%; }
         [data-field="text"] { display: flex; flex-direction: column; }
-        /* Mark scheme / model answer images: side-by-side */
         [data-field="ms"] .img-row, [data-field="model"] .img-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
         [contenteditable="true"]::after { content: ' ✏️'; opacity: 0; font-size: 10px; }
         [contenteditable="true"]:hover::after { opacity: 0.4; }
+        /* ── HTML question text rendering ── */
+        .q-subpart { display:flex; gap:8px; align-items:baseline; padding:5px 0; border-bottom:0.5px solid #e2e8f0; }
+        .q-subpart:last-child { border-bottom:none; }
+        .q-label { display:inline-flex; align-items:center; justify-content:center; background:#1e40af; color:#dbeafe; font-size:10px; font-weight:700; padding:2px 7px; border-radius:10px; white-space:nowrap; flex-shrink:0; font-family:monospace; }
+        .q-label.ext { background:#92400e; color:#fef3c7; }
+        .q-label.mixed { background:#4c1d95; color:#ede9fe; }
+        .q-stem { font-size:12.5px; color:#334155; margin:0 0 8px; padding-bottom:8px; border-bottom:0.5px solid #e2e8f0; font-style:normal; }
+        .q-body { font-size:12.5px; color:#334155; flex:1; line-height:1.65; }
+        .q-marks-pill { display:inline-block; background:#f1f5f9; border:0.5px solid #cbd5e1; border-radius:8px; font-size:10px; color:#64748b; padding:1px 6px; margin-left:5px; white-space:nowrap; }
+        .q-ans-line { display:block; border-bottom:0.5px solid #94a3b8; height:18px; margin:5px 0; }
+        .q-fig { background:#f8fafc; border:0.5px dashed #94a3b8; border-radius:6px; padding:8px 12px; font-size:11px; color:#64748b; text-align:center; margin:6px 0; }
+        .q-table { border-collapse:collapse; width:100%; font-size:11.5px; margin:6px 0 10px; }
+        .q-table th { background:#1e3a5f; color:#dbeafe; padding:4px 8px; font-weight:600; border:0.5px solid #1e40af; text-align:left; }
+        .q-table td { padding:4px 8px; border:0.5px solid #e2e8f0; color:#334155; }
+        .q-table tr:nth-child(even) td { background:#f8fafc; }
+        /* ── Mark scheme structured prefixes ── */
+        .ms-line { display:flex; gap:7px; align-items:baseline; padding:3px 0; border-bottom:0.5px solid #f1f5f9; font-size:11.5px; }
+        .ms-line:last-child { border-bottom:none; }
+        .ms-icon { flex-shrink:0; width:18px; font-size:13px; }
+        .ms-correct { color:#065f46; }
+        .ms-alt { color:#374151; }
+        .ms-reject { color:#991b1b; }
+        .ms-note { color:#5b21b6; font-style:italic; }
+        /* ── Model answer numbered steps ── */
+        .step-list { list-style:none; padding:0; margin:0; }
+        .step-item { display:flex; gap:8px; align-items:baseline; padding:3px 0; font-size:11.5px; color:#334155; }
+        .step-num { flex-shrink:0; width:20px; height:20px; background:#e0e7ff; color:#3730a3; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-size:10px; font-weight:700; }
 </style></head><body>
 <div style="border-bottom:3px solid #4f46e5;padding-bottom:14px;margin-bottom:20px">
   <div style="display:flex;justify-content:space-between;align-items:flex-start">
     <div>
-      <h1 style="color:#0d9488;font-size:20px;font-weight:800">Cambridge Chemistry 0620 — Analysis Report <span style="background:#ccfbf1;color:#0d9488;font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;vertical-align:middle">v1</span></h1>
-      <div style="color:#64748b;font-size:11px;margin-top:4px">📄 <strong>${paper}</strong> &nbsp;·&nbsp; 📅 ${new Date().toLocaleString()} &nbsp;·&nbsp; 📚 Cambridge IGCSE Chemistry 0620 (2026–2028) &nbsp;·&nbsp; ${sortMode==='topic'?'Topic Order':'Exam Order'}</div>
+      <h1 style="color:#4f46e5;font-size:20px;font-weight:800">Cambridge Biology 0610 — Analysis Report <span style="background:#eef2ff;color:#4f46e5;font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;vertical-align:middle">v51.1</span></h1>
+      <div style="color:#64748b;font-size:11px;margin-top:4px">📄 <strong>${paper}</strong> &nbsp;·&nbsp; 📅 ${new Date().toLocaleString()} &nbsp;·&nbsp; 📚 Cambridge IGCSE Biology 0610 (2026–2028) &nbsp;·&nbsp; ${sortMode==='topic'?'Topic Order':'Exam Order'}</div>
     </div>
     <div class="no-print" style="display:flex;gap:6px">
-      <button onclick="(function(){const b=new Blob([document.documentElement.outerHTML],{type:'text/html'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='${buildReportFilename(currentPaperCode||paper||'Unknown','PrintReport',sortMode,unitFilter)}.html';a.click();URL.revokeObjectURL(a.href);})()" style="background:#16a34a;color:white;border:none;padding:8px 14px;border-radius:6px;font-weight:700;cursor:pointer;font-size:11px">💾 Save HTML</button>
-      <button onclick="window.print()" style="background:#0d9488;color:white;border:none;padding:8px 16px;border-radius:6px;font-weight:700;cursor:pointer;font-size:11px">🖨️ Print</button>
+      <button onclick="window.print()" style="background:#4f46e5;color:white;border:none;padding:8px 16px;border-radius:6px;font-weight:700;cursor:pointer;font-size:11px">🖨️ Print</button>
     </div>
   </div>
   <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap">
     <div style="padding:10px 16px;border-radius:8px;background:#eff6ff;border:1px solid #bfdbfe;min-width:90px"><div style="font-size:9px;font-weight:700;color:#94a3b8;text-transform:uppercase">🔵 Core</div><div style="font-size:22px;font-weight:800;color:#0284c7">${sourceData.filter(q=>q.currType==='Core'||q.currType==='Core/Extended').length}</div></div>
     <div style="padding:10px 16px;border-radius:8px;background:#fff7ed;border:1px solid #fed7aa;min-width:90px"><div style="font-size:9px;font-weight:700;color:#94a3b8;text-transform:uppercase">🟠 Extended</div><div style="font-size:22px;font-weight:800;color:#ea580c">${sourceData.filter(q=>q.currType==='Extended'||q.currType==='Core/Extended').length}</div></div>
     <div style="padding:10px 16px;border-radius:8px;background:#fff1f2;border:1px solid #fecdd3;min-width:90px"><div style="font-size:9px;font-weight:700;color:#94a3b8;text-transform:uppercase">🟥 Removed</div><div style="font-size:22px;font-weight:800;color:#dc2626">${sourceData.filter(q=>q.syllabusStatus==='removed').length}</div></div>
-    <div style="padding:10px 16px;border-radius:8px;background:#ccfbf1;border:1px solid #99f6e4;min-width:90px"><div style="font-size:9px;font-weight:700;color:#94a3b8;text-transform:uppercase">📊 Marks</div><div style="font-size:22px;font-weight:800;color:#0d9488">${sourceData.reduce((s,q)=>s+(parseInt(q.marks)||0),0)}</div></div>
+    <div style="padding:10px 16px;border-radius:8px;background:#faf5ff;border:1px solid #e9d5ff;min-width:90px"><div style="font-size:9px;font-weight:700;color:#94a3b8;text-transform:uppercase">📊 Marks</div><div style="font-size:22px;font-weight:800;color:#7c3aed">${sourceData.reduce((s,q)=>s+(parseInt(q.marks)||0),0)}</div></div>
   </div>
 </div>
 ${topicSummaryHtml}
 ${cards}
 <div style="margin-top:24px;color:#94a3b8;font-size:10px;border-top:1px solid #e2e8f0;padding-top:10px;text-align:center">
-  Generated by IGCSE Processor v1 · Cambridge IGCSE Chemistry 0620 (2026–2028) · Classification by Gemini AI
+  Generated by IGCSE Processor v51.1 · Cambridge 0610 Biology (2026–2028) · Classification by Gemini AI
 </div>
 </body></html>`;
             pw.document.write(html);
@@ -2792,7 +2849,7 @@ ${cards}
         }
 
         // ======================================================================
-        // v51: extractSyllabusTopics — hardcoded Chemistry 0620 ONLY
+        // v51: extractSyllabusTopics — hardcoded Biology 0610 ONLY
         // Uploaded syllabus PDFs are intentionally IGNORED for classification.
         // The hardcoded 2026-2028 database is always used.
         // If a user uploads a Chemistry/Physics syllabus, we warn them.
@@ -2806,12 +2863,12 @@ ${cards}
             // Do NOT overwrite hardcoded data if already loaded — just show a notice
             if (syllabusParser.isSyllabusLoaded()) {
                 showModal('ℹ️ Syllabus Already Loaded',
-                    'v1 uses the hardcoded Cambridge IGCSE Chemistry 0620 (2026-2028) database.\\n\\nThe uploaded PDF was not used — the built-in database is always authoritative.');
+                    'v51 uses the hardcoded Cambridge IGCSE Biology 0610 (2026-2028) database.\\n\\nThe uploaded PDF was not used — the built-in database is always authoritative.');
                 return;
             }
 
             // First load — load the hardcoded database
-            syllabusArea.value = '📖 Loading Cambridge IGCSE Chemistry 0620 (2026-2028) hardcoded syllabus...';
+            syllabusArea.value = '📖 Loading Cambridge IGCSE Biology 0610 (2026-2028) hardcoded syllabus...';
             if (parseStatus) parseStatus.textContent = '⏳ Loading...';
             await new Promise(r => setTimeout(r, 150));
             loadHardcodedSyllabus();
@@ -2824,7 +2881,7 @@ ${cards}
             }
             setExtractionStatus('ready', 'SYLLABUS READY — Now upload Exam PDF');
             showModal('✅ Syllabus Ready (2026-2028)',
-                `Cambridge IGCSE Chemistry 0620 (2026-2028) loaded from built-in database:\n🔵 ${s.totalCore} Core topics\n🟠 ${s.totalSupplement} Supplement topics\n\nNote: uploaded PDF not parsed — hardcoded data is always used.`);
+                `Cambridge IGCSE Biology 0610 (2026-2028) loaded from built-in database:\n🔵 ${s.totalCore} Core topics\n🟠 ${s.totalSupplement} Supplement topics\n\nNote: uploaded PDF not parsed — hardcoded data is always used.`);
         }
 
         async function detectSubjectFromExam() {
@@ -2834,7 +2891,7 @@ ${cards}
             status.classList.remove('hidden');
             try {
                 // v52: Use Gemini vision instead of pdfjs — reads Cambridge PDFs reliably
-                const coverPrompt = `Look at the cover or header of this exam paper. Extract: (1) subject name e.g. Chemistry, Biology; (2) FULL paper code including year e.g. 0620/42/O/N/24 or 0610/42/O/N/24. Reply ONLY in this exact format: SUBJECT|PAPERCODE`;
+                const coverPrompt = `Look at the cover or header of this exam paper. Extract: (1) subject name e.g. Biology, Chemistry; (2) FULL paper code including year e.g. 0610/42/O/N/24 or 4BI1/1B/2024. Reply ONLY in this exact format: SUBJECT|PAPERCODE`;
                 const geminiCoverPayload = {
                     contents: [{ parts: [
                         { inlineData: { data: uploadedFiles.exam.data, mimeType: uploadedFiles.exam.mimeType } },
@@ -2878,31 +2935,123 @@ ${cards}
                 container.innerHTML = '<span class="text-slate-400 text-xs italic">No questions extracted yet.</span>';
                 return;
             }
-            const lines = text.split('\n').filter(l => l.trim());
-            container.innerHTML = lines.map(line => {
-                let html = line
-                    // [CORE] badge
+
+            function applyPills(html) {
+                return html
                     .replace(/\[CORE\/EXTENDED\]/g, '<span class="inline-block bg-purple-100 text-purple-700 font-bold px-1.5 py-0.5 rounded text-[10px] mx-0.5">[CORE/EXTENDED]</span>')
-                    // [CORE] badge
-                    .replace(/\[CORE\]/g, '<span class="inline-block bg-blue-100 text-blue-700 font-bold px-1.5 py-0.5 rounded text-[10px] mx-0.5">[CORE]</span>')
-                    // [EXTENDED] badge
+                    .replace(/\[CORE\]/g,     '<span class="inline-block bg-blue-100 text-blue-700 font-bold px-1.5 py-0.5 rounded text-[10px] mx-0.5">[CORE]</span>')
                     .replace(/\[EXTENDED\]/g, '<span class="inline-block bg-orange-100 text-orange-700 font-bold px-1.5 py-0.5 rounded text-[10px] mx-0.5">[EXTENDED]</span>')
-                    // [X marks] badge
-                    .replace(/\[(\d+) marks?\]/gi, '<span class="inline-block bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded text-[10px] mx-0.5">[$1 marks]</span>')
-                    // [Topic X.X SubtopicName] — show BOTH parent topic AND subtopic
-                    .replace(/\[(?:Topic )?([\d]+)\.([\d]+)[:\s–-]*([^\]]+)\]/g, (match, topicN, subN, subName) => {
-                        const topicNum = parseInt(topicN);
-                        const parentName = TOPIC_NAMES[topicNum] || `Topic ${topicNum}`;
-                        const subtopicId = `${topicN}.${subN}`;
-                        return `<span class="inline-flex items-center gap-0.5 mx-0.5">` +
-                            `<span class="inline-block bg-indigo-100 text-indigo-700 font-bold px-1.5 py-0.5 rounded-l text-[10px]">📚 T${topicNum}: ${parentName}</span>` +
-                            `<span class="inline-block bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded-r text-[10px]">${subtopicId} ${subName.trim()}</span>` +
-                            `</span>`;
-                    })
-                    // Bold question ID
-                    .replace(/^(Q\d+(?:\([^)]+\))+):/, '<span class="font-bold text-slate-800">$1</span>:');
-                return `<div class="py-1 border-b border-slate-100">${html}</div>`;
-            }).join('');
+                    .replace(/\[(\d+) marks?\]/gi, '<span class="inline-block bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded text-[10px] mx-0.5">[$1 marks]</span>')
+                    .replace(/\[(?:Topic )?([\d]+)\.([\d]+)[:\s\u2013-]*([^\]]+)\]/g, function(_, tN, sN, sName) {
+                        const tNum = parseInt(tN);
+                        const parentName = TOPIC_NAMES[tNum] || ('Topic ' + tNum);
+                        return '<span class="inline-flex items-center gap-0.5 mx-0.5">' +
+                            '<span class="inline-block bg-indigo-100 text-indigo-700 font-bold px-1.5 py-0.5 rounded-l text-[10px]">\uD83D\uDCDA T' + tNum + ': ' + parentName + '</span>' +
+                            '<span class="inline-block bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded-r text-[10px]">' + tN + '.' + sN + ' ' + sName.trim() + '</span></span>';
+                    });
+            }
+
+            const lines = text.split('\n').filter(l => l.trim());
+
+            // Parse into parent groups for hierarchical display
+            // Each line: Q1(a)(i): stem text. Sub-instruction. [marks] [TYPE] [Topic]
+            const groups = {}; // parentNum → { stem, children[] }
+            const order  = []; // parent numbers in order
+
+            lines.forEach(line => {
+                const m = line.match(/^Q(\d+)(\([^)]+\)(?:\([^)]+\))*)?:\s*(.*)/);
+                if (!m) return;
+                const parentNum = m[1];
+                const parts     = m[2] || ''; // e.g. "(a)(i)"
+                const body      = m[3] || '';
+
+                if (!groups[parentNum]) { groups[parentNum] = { stem: '', children: [] }; order.push(parentNum); }
+
+                if (!parts) {
+                    // Bare parent Q line (Q1:)
+                    groups[parentNum].stem = body;
+                } else {
+                    // Sub-question — extract the stem (text before the sub-instruction)
+                    // The stem is repeated at the start of every child
+                    // Detect it: if this is the first child, everything before the actual instruction is stem
+                    const existingStem = groups[parentNum].stem;
+                    // Try to extract stem: text before [marks] or before the instruction verb
+                    // Simple approach: if stem is empty, try to detect repeated prefix across siblings
+                    groups[parentNum].children.push({ parts, body, line });
+                }
+            });
+
+            // Now detect repeated stem prefix across siblings and extract it
+            order.forEach(parentNum => {
+                const g = groups[parentNum];
+                if (g.children.length === 0) return;
+                if (g.stem) return; // already have stem from bare Q line
+
+                // Find longest common prefix across all children (before any [mark] or [CORE] tag)
+                const bodies = g.children.map(ch => {
+                    // Strip marks and classification tags to find the instruction part
+                    return ch.body.replace(/\[\d+ marks?\][\s\S]*/i, '').replace(/\[CORE[^\]]*\]/, '').trim();
+                });
+
+                if (bodies.length < 2) {
+                    // Single child — just use as-is, no stem extraction
+                    return;
+                }
+
+                // Find common prefix words
+                const words0 = bodies[0].split(' ');
+                let commonLen = words0.length;
+                for (let bi = 1; bi < bodies.length; bi++) {
+                    const words = bodies[bi].split(' ');
+                    let match = 0;
+                    while (match < commonLen && match < words.length && words0[match] === words[match]) match++;
+                    commonLen = match;
+                }
+
+                // Only extract if common prefix is at least 4 words (meaningful stem)
+                if (commonLen >= 4) {
+                    g.stem = words0.slice(0, commonLen).join(' ');
+                }
+            });
+
+            // Render
+            let html = '';
+            order.forEach(parentNum => {
+                const g = groups[parentNum];
+
+                // Parent Q line: strip marks/type/topic — show stem text only
+                const cleanStem = g.stem
+                    ? g.stem
+                        .replace(/\[\d+\s*marks?\]/gi, '')
+                        .replace(/\[CORE\/EXTENDED\]/g, '')
+                        .replace(/\[CORE\]/g, '')
+                        .replace(/\[EXTENDED\]/g, '')
+                        .replace(/\[(?:Topic )?[\d]+\.[\d]+[^\]]*\]/g, '')
+                        .trim()
+                    : '';
+                const displayStem = (cleanStem === '(no shared stem)' || cleanStem === 'Independent sub-questions.' || !cleanStem) ? '' : cleanStem;
+                html += '<div class="mt-3 mb-1 text-slate-800 text-[12.5px] border-b border-slate-200 pb-1 leading-snug">' +
+                        '<span class="font-bold text-indigo-600 font-mono mr-1">Q' + parentNum + ':</span>' +
+                        (displayStem || '') +
+                        '</div>';
+
+                // Children
+                g.children.forEach(ch => {
+                    // Remove the repeated stem from the body if we extracted it
+                    let displayBody = ch.body;
+                    if (g.stem && displayBody.startsWith(g.stem)) {
+                        displayBody = displayBody.slice(g.stem.length).trim();
+                        if (displayBody.startsWith('.') || displayBody.startsWith(',')) displayBody = displayBody.slice(1).trim();
+                    }
+
+                    const rendered = applyPills(displayBody);
+                    html += '<div class="py-1 pl-4 border-b border-slate-100 text-xs font-mono">' +
+                            '<span class="font-bold text-slate-700 mr-1">Q' + parentNum + ch.parts + ':</span>' +
+                            rendered + '</div>';
+                });
+            });
+
+            container.innerHTML = html || '<span class="text-slate-400 text-xs italic">No questions parsed.</span>';
         }
 
         // v52: autoExtract — Gemini vision only, no pdfjs
@@ -2918,7 +3067,7 @@ ${cards}
                 currentSubject = getSubjectLabel(detectedSubjectKey);
                 const subjectKeyEl = document.getElementById('subject-key-display');
                 if (subjectKeyEl) subjectKeyEl.textContent = currentSubject;
-                const biologyRef = getChemistryRef();
+                const biologyRef = getBiologyRef();
                 const syllabusForPrompt = syllabusParser.getStructuredForPrompt();
 
                 const extractPrompt = `Read every page of this IGCSE exam paper carefully, including all diagrams, tables, and graphs.
@@ -2940,13 +3089,24 @@ IGNORE COMPLETELY — do NOT include in any output:
 - Any reading or transcription of diagram labels, axis values, table data, or figure content — these are not part of the question text
 
 For EACH question and sub-part found, write ONE line in this EXACT format (all on one single line):
-Q[number]([part]): <complete question text only — no dots, no blanks> [X marks] [CORE or EXTENDED or CORE/EXTENDED] [Topic N.N SubtopicName]
+Q[number]([part]): <complete question text only — no dots, no blanks> [X marks] [CORE or EXTENDED] [Topic N.N SubtopicName]
 
-RULE: [X marks] is REQUIRED on every line. Count the marks from the mark scheme or the number in brackets on the paper (e.g. "[3]" = [3 marks]). Never omit it.
+RULE: [X marks] is REQUIRED on every CHILD sub-question line. Count marks from the paper. Never omit.
+
+PARENT QUESTION LINE — REQUIRED BEFORE EACH GROUP OF SUB-QUESTIONS:
+Output ONE bare parent line per main question number (Q1, Q2, Q3…) immediately before its sub-questions:
+Q[number]: <full parent/stem text — the shared context or scenario for this question>
+Example:  Q2: Chickens are birds that are bred by farmers. Table 2.1 shows characteristics of red junglefowl and farmed chickens.
+If the main question has no shared stem (each sub-part is independent), still output: Q[number]: (no shared stem)
+
+SUB-QUESTION LINES — one line per sub-part, immediately after the parent line:
+Q[number]([part]): <sub-question instruction only — do NOT repeat the parent stem here> [X marks] [CORE or EXTENDED] [Topic N.N SubtopicName]
+Example:  Q2(a)(i): Calculate the percentage change in mean body mass. Give your answer to 3 s.f. [3 marks] [CORE] [Topic 18.3 Selection]
 
 CRITICAL — question text rules by question type:
-Always begin with Q[number]([part]): so it is clear which question it is (e.g. Q1(a)(i):).
-- PARENT STEM: Every sub-question MUST start with the full parent stem. Never output a bare sub-part without parent context. Example: Q1(a)(i): The diagram shows a mitochondrion. State its function. [1 mark] ...
+Always begin each line with Q[number]: or Q[number]([part]): exactly.
+- Each sub-question instruction is concise — it does NOT include the parent stem text.
+- MULTIPLE CHOICE: Write all options A, B, C, D in full with their text. Example: Q3(a): Which feature is found in plant cells? A Cell wall B Mitochondria C Ribosome D Nucleus [1 mark] ...
 - MULTIPLE CHOICE: Write all options A, B, C, D in full with their text. Example: Q3: Which feature is found in plant cells but not animal cells? A Carbon dioxide B Cell wall C Cytoplasm D Cell membrane [1 mark] [CORE] [Topic N.N ...]
 - FILL IN THE BLANKS: Reproduce the sentence with .............. dots exactly where the blanks are.
 - COMPLETE THE TABLE: Describe the full table structure — all column headers, row labels, any given data already filled in, and mark empty cells as [blank].
@@ -2961,6 +3121,21 @@ Use [EXTENDED] when the entire question tests Extended/Supplement content only.
 Use [CORE] for all other questions.
 
 Extended keywords → [EXTENDED]: water potential, plasmolysis, glucagon, fibrinogen, auxin, meiosis, mitosis, DNA base pairing, nephron, lymphocyte, phagocyte, eutrophication, codominance, test cross, FSH, LH, goblet cells, ciliated cells, cilia, mucus protect, pollen tube, oxygen debt, fermenter, restriction enzyme, vaccination mechanism, pyramid of energy comparison, percentage energy transfer, genetic variation, diabetes treatment (insulin injection/pump), antibiotic resistance mechanism, hydrophyte adaptation, xerophyte adaptation, monocotyledon features, dicotyledon features, cartilage function in breathing system, breathing rate control (CO2/brain), blood glucose regulation detail (mechanism of insulin/glucagon, named cells), transpiration factors, translocation, maltase and specific enzyme products (maltase→glucose, pepsin→amino acids), fermenter for industrial antibiotic/penicillin production (NOT yeast bread/biofuel which is Core), kingdoms of fungi/protoctista identification.
+
+CRITICAL EXTENDED corrections (verified against Cambridge 0610 2026-2028 syllabus):
+- Classifying plants into ferns / flowering plants / dicotyledons / monocotyledons → [EXTENDED] [Topic 1.3]  (Core only requires animal/vertebrate groups)
+- Urea formation, deamination, amino acid breakdown → [EXTENDED] [Topic 13.1]
+- Explaining WHY wilting occurs (turgor pressure, water potential) → [EXTENDED] [Topic 8.3]  (Stating that plants wilt = Core)
+- Explaining effect of temperature/humidity/wind speed on transpiration rate → [EXTENDED] [Topic 8.3]  (Stating rate changes = Core; explaining mechanism = Extended)
+- Identifying atrioventricular valves or semilunar valves → [EXTENDED] [Topic 9.2]  (General valve mention = Core)
+- Explaining relative thickness of ventricle/atria walls → [EXTENDED] [Topic 9.2]
+- Describing cardiac cycle / sequence of blood flow through heart chambers → [EXTENDED] [Topic 9.2]
+- Explaining WHY heart rate changes with exercise (mechanism) → [EXTENDED] [Topic 9.2]  (Stating heart rate changes = Core)
+- Explaining eutrophication process (mechanism) → [EXTENDED] [Topic 20.3]
+- Selective breeding / artificial selection → [CORE] [Topic 18.3 Selection]  NOT Topic 21
+- Exercise effect on heart rate (with fig showing data/graph) → [Topic 9.2] NOT [Topic 11.1]
+- Septum separating oxygenated/deoxygenated blood = [CORE]; identifying atrioventricular valve = [EXTENDED] → use [CORE/EXTENDED] if question asks both
+- Balanced CHEMICAL equation for photosynthesis (6CO₂ + 6H₂O → C₆H₁₂O₆ + 6O₂) → [EXTENDED]  (word equation = Core)
 
 Core keywords → [CORE]: diffusion (basic), osmosis (basic), photosynthesis (word equation only), enzyme (basic role), food chain, carbon cycle, state/name/identify a fact, yeast in bread-making, yeast in biofuel/fermentation (basic use), basic blood glucose control (insulin lowers/glucagon raises), state what antibiotics kill (bacteria), name of genus/species in binomial system. NOTE: balanced CHEMICAL equation for respiration = [EXTENDED] (supplement only). Word equation for respiration = [CORE]. Balanced symbol equation = always [EXTENDED].
 
@@ -3049,14 +3224,14 @@ CLASSIFICATION RULES:
 ${detectedSubjectKey === "cambridge_biology_0610" || !detectedSubjectKey ? biologyRef : (getClassificationRef(detectedSubjectKey) || biologyRef)}Full syllabus reference:
 ${syllabusForPrompt.substring(0, 12000)}
 
-List every question and every sub-part. Do not skip any. One line per sub-question.
-IMPORTANT: Continue until you reach the LAST question on the LAST page. Do not stop early.`;
+Work through every page of the exam from first to last. Output EVERY parent question and EVERY sub-part.
+List every question and every sub-part. Do not skip any. One line per sub-question.`;
                 const geminiPayload = {
                     contents: [{ parts: [
                         { inlineData: { data: uploadedFiles.exam.data, mimeType: uploadedFiles.exam.mimeType } },
                         { text: extractPrompt }
                     ]}],
-                    generationConfig: { temperature: 0.1 }
+                    generationConfig: { temperature: 0.1, maxOutputTokens: 65536 }
                 };
                 const data = await callAPI(geminiPayload, extractPrompt, [uploadedFiles.exam.data], 90000); // 90s for exam PDF extraction
 
@@ -3067,6 +3242,7 @@ IMPORTANT: Continue until you reach the LAST question on the LAST page. Do not s
                 if (qt) qt.value = extractedText;
                 renderConsole(extractedText);
 
+                // Parse hierarchical format: •(a)(i) lines with [CORE]/[EXTENDED] and [Topic N.N]
                 // Parse and store classifications for use by analyzeDocuments
                 window.extractedClassifications = {};
                 window.extractedTopics = {}; // qID → { subtopicId, topicNum, subName }
@@ -3093,12 +3269,12 @@ IMPORTANT: Continue until you reach the LAST question on the LAST page. Do not s
                 });
                 console.log('[AutoExtract] Stored classifications:', window.extractedClassifications);
 
-                const coreCount = (extractedText.match(/\[CORE\]/g) || []).length;
-                const extCount  = (extractedText.match(/\[EXTENDED\]/g) || []).length;
-                const mixedCount = (extractedText.match(/\[CORE\/EXTENDED\]/g) || []).length;
-                const topicCount = (extractedText.match(/\[Topic /g) || []).length;
+                const coreCount  = extractedText.split('\n').filter(l => /^Q\d+\(/.test(l) && l.includes('[CORE]')).length;
+                const extCount   = extractedText.split('\n').filter(l => /^Q\d+\(/.test(l) && (l.includes('[EXTENDED]') || l.includes('[CORE/EXTENDED]'))).length;
+                const mixedCount = 0;
+                const topicCount = extractedText.split('\n').filter(l => /^Q\d+\(/.test(l) && l.includes('[Topic ')).length;
                 isExtracting=false;checkInputs();
-                setExtractionStatus('complete', `✅ READY — ${coreCount} Core · ${extCount} Extended${mixedCount>0?' · '+mixedCount+' Mixed':''} · ${topicCount} topics tagged`);
+                setExtractionStatus('complete', `✅ READY — ${coreCount} Core · ${extCount} Extended · ${topicCount} topics tagged`);
 
 
                 // ── Show review modal ──────────────────────────────────────
@@ -3133,7 +3309,7 @@ IMPORTANT: Continue until you reach the LAST question on the LAST page. Do not s
             currentPaperCode = paperParts.length > 1 ? paperParts[paperParts.length - 1] : subjectInput;
             const _subjectKey = detectSubjectKey(subjectInput);
             currentSubject = getSubjectLabel(_subjectKey);
-            const biologyRef = getChemistryRef();
+            const biologyRef = getBiologyRef();
 
             // Build the structured syllabus for the prompt
             const syllabusForPrompt = syllabusParser.getStructuredForPrompt();
@@ -3157,12 +3333,15 @@ IMPORTANT: Continue until you reach the LAST question on the LAST page. Do not s
                 lockedClassTable += 'These Core/Extended values were determined by careful analysis of the exam questions. ';
                 lockedClassTable += 'Use them EXACTLY as given for the currType field. Do not re-classify.\n';
                 lcKeys.forEach(qid => {
-                    lockedClassTable += `  Q${qid}: ${lc[qid]}\n`;
+                    const topicInfo = (window.extractedTopics || {})[qid];
+                    const topicStr  = topicInfo ? ` [Topic ${topicInfo.subtopicId} ${topicInfo.subName}]` : '';
+                    lockedClassTable += `  Q${qid}: ${lc[qid]}${topicStr}\n`;
                 });
                 lockedClassTable += 'If a question ID is not listed above, classify it yourself using the reference below.\n';
+                lockedClassTable += 'TOPIC: where a [Topic N.N] is given above, use that subtopicId and subTopic — do not re-derive the topic from scratch.\n';
             }
 
-            const sysPrompt = `You are an expert Cambridge IGCSE examiner analyzing a Chemistry exam paper, its mark scheme, and (if provided) a teacher comments / examiner report PDF.
+            const sysPrompt = `You are an expert Cambridge IGCSE examiner analyzing a Biology exam paper, its mark scheme, and (if provided) a teacher comments / examiner report PDF.
 
 READ EVERY SINGLE PAGE of every uploaded PDF. Do not skip any page. Do not summarise or truncate. This includes:
 - Every question and every sub-part (1a, 1b, 1b(i), 1b(ii), etc.)
@@ -3170,7 +3349,7 @@ READ EVERY SINGLE PAGE of every uploaded PDF. Do not skip any page. Do not summa
 - Every mark scheme point for every sub-part
 - All examiner/teacher comments if a comments PDF was uploaded
 
-${lockedClassTable}CLASSIFICATION — the currType for every sub-question is already determined and provided in the LOCKED CLASSIFICATIONS table above. You do NOT need to classify anything yourself. Your only job is to generate the content fields (text, ms, model, explanation, steps, commonMistakes, examTips, feedback, tutorNote) for each question.
+${lockedClassTable}CLASSIFICATION — the currType for every sub-question is already determined and provided in the LOCKED CLASSIFICATIONS table above. You do NOT need to classify anything yourself. Your only job is to generate the content fields (text, ms, model, explanation, steps, feedback) for each question.
 
 For Edexcel LINEAR (4BI1/4CH1): Section A = "Core", Section B = "Extended". For Edexcel MODULAR (4XBI1/4XCH1): UNTIERED — use "Core" for Unit 1 topics, "Extended" for Unit 2 topics (unit paper indicator, not difficulty). For Cambridge papers: Core = "Core", Supplement/Extended = "Extended".
 
@@ -3180,7 +3359,7 @@ For the rare case where a question ID is not in the locked table:
 - "Core/Extended" = sub-question contains both a Core and an Extended task
 - "removed" = topic no longer in current syllabus
 
-${_subjectKey === "cambridge_chemistry_0620" || !_subjectKey ? biologyRef : (getClassificationRef(_subjectKey) || biologyRef)}${syllabusForPrompt.substring(0, 15000)}
+${_subjectKey === "cambridge_biology_0610" || !_subjectKey ? biologyRef : (getClassificationRef(_subjectKey) || biologyRef)}${syllabusForPrompt.substring(0, 15000)}
 
 For EVERY question and sub-part return a JSON object with these fields:
 
@@ -3193,10 +3372,25 @@ Example: if Q1 has parts (a) and (b), and Q1(a) has parts (i) and (ii), output:
 Only include a parent (e.g. Q1(a)) if it has NO further sub-parts.
 
 - qID: string — exact identifier e.g. "1(a)(i)", "2(b)", "3(c)(ii)"
-- topic: string — main chemistry topic name e.g. "Electrolysis", "Rates of Reaction"
-- subtopicId: string — syllabus subtopic number e.g. "1.1", "2.4", "11.5" — match exactly to the Chemistry syllabus provided
+- topic: string — main biology topic name e.g. "Photosynthesis", "Cell Structure"
+- subtopicId: string — syllabus subtopic number e.g. "6.1", "2.1", "17.2" — match exactly to the syllabus provided
 - subTopic: string — specific concept tested within that subtopic
-- currType: "Core", "Extended", or "Core/Extended" — CRITICAL: if this question ID appears in the LOCKED CLASSIFICATIONS table above, you MUST use that value exactly (including "Core/Extended"). Only classify yourself if not in the locked table.
+- currType: "Core" or "Extended" — CRITICAL: if this question ID appears in the LOCKED CLASSIFICATIONS table above, you MUST use that value exactly (including "Core/Extended"). Only classify yourself if not in the locked table.
+
+KEY CLASSIFICATION RULES (verified against 2026-2028 syllabus):
+• Classifying plants into ferns/dicotyledons/monocotyledons → "Extended" [1.3]
+• Urea formation, deamination → "Extended" [13.1]
+• Explaining wilting mechanism → "Extended" [8.3]
+• Explaining transpiration rate factors (HOW/WHY) → "Extended" [8.3]
+• Identifying atrioventricular/semilunar valves → "Extended" [9.2]
+• Explaining ventricle wall thickness → "Extended" [9.2]
+• Describing cardiac cycle / blood flow sequence → "Extended" [9.2]
+• Explaining WHY heart rate changes with exercise → "Extended" [9.2]
+• Selective breeding / artificial selection → "Core" subtopicId: "18.3" NOT "21.1"
+• Exercise + heart rate question → subtopicId: "9.2" NOT "11.1"
+• Eutrophication mechanism → "Extended" [20.3]
+• Balanced chemical photosynthesis equation → "Extended" [6.1]
+• Septum (oxygenated/deoxygenated blood separation) = Core; identifying AV valve = Extended → use "Core/Extended" if question asks both
 - syllabusStatus: "current" or "removed"
 - syllabusBadge: "✅ CURRENT" or "🟥 REMOVED"
 - classificationReason: string — one sentence citing the exact syllabus point
@@ -3204,26 +3398,17 @@ Only include a parent (e.g. Q1(a)) if it has NO further sub-parts.
 - difficulty: "Easy", "Medium", or "Hard"
 - timeEstimate: number — suggested minutes to answer
 
-- text: string — The sub-question instruction ONLY. Do NOT include the parent stem. For parent questions (Q1, Q2), include their stem. Rules: (1) Multiple choice: all A/B/C/D in full. (2) Fill-in-blanks: reproduce dots exactly. (3) Tables: use | pipe | format with [blank] for empty cells. (4) Calculations: all given values+units. (5) Diagrams: describe axes/labels in [square brackets]. CRITICAL: If this is a sub-question e.g. 1(a)(i), you MUST start the text with the parent question's stem/context (e.g. "The diagram shows a cell in salt solution. [Fig. 1 shows: cell A has a large vacuole...] ") then append the sub-question instruction. NEVER output only the sub-part wording alone — always prepend all parent-level context. If the question refers to a diagram, table, or graph, describe every label, value, axis, and data point from it in full words so the question is fully self-contained without the image.
-
-- stem: string — Parent question stem/context. Empty "" for top-level questions; full parent context for sub-questions.
+- text: string — The sub-question instruction ONLY (no parent stem, no marks, no classification). Plain text. For multiple choice include all options A/B/C/D. For fill-in-blanks reproduce with underscores. For tables use | pipe | format.
 
 - ms: string — ALL mark scheme points for this sub-part as a detailed paragraph. Include every accepted alternative answer, every mark allocation note, and every "allow / do not allow / ignore" instruction. Do not truncate.
 
-- model: string — Write a natural, well-structured model answer that a top student would write to earn FULL marks. Base it STRICTLY on the mark scheme and syllabus. Cover every DISTINCT marking point. For calculation or multi-step questions, include the full step-by-step working INSIDE this field (numbered steps, show all working). Respect the command word:
-  • Calculate → show working step by step
-  • Compare → state both similarities AND differences
-  • Define → give the precise biological meaning
-  • Describe → state the observable features/steps
-  • Determine → derive the answer from given information
-  • Evaluate → weigh evidence and make a judgement
-  • Explain → give reasons and link cause to effect
-  • Give / State → one clear concise answer per mark
-  • Identify / Name → the specific term only
-  • Outline → main points, no detail required
-  • Predict → state what will happen and why
-  • Suggest → apply knowledge to a new context
-Write as flowing prose (not bullet points). Use <b>bold</b> for key biological terms and scientific nomenclature.
+- model: string — Write a comprehensive model answer derived STRICTLY from the mark scheme and Cambridge 0610 syllabus. CRITICAL RULES:
+  1. IGNORE all quantity limiters — do NOT limit yourself to "two", "three", "any two from" etc. Include EVERY relevant biological point from the mark scheme AND every related point from the syllabus for this subtopic.
+  2. For each marking point, expand with the full biological explanation as the syllabus requires.
+  3. Use command-word conventions: Calculate → numbered working steps. Compare → explicit similarities AND differences. Explain → cause→mechanism→effect chain. Describe → sequential observable steps.
+  4. Bold key biological terms with **term**.
+  5. Write as flowing prose. No bullet points.
+  6. If the mark scheme has 6 possible points but the question says "state two", still write all 6 — the student uses this to revise every possible answer.
 
 - explanation: string — a thorough paragraph explaining the underlying biology concept being tested, written clearly for a student who got the question wrong.
 
@@ -3233,10 +3418,6 @@ Write as flowing prose (not bullet points). Use <b>bold</b> for key biological t
 
 - tutorNote: string — a tutor's personal note: what to emphasise when teaching this, common gaps in understanding, how it links to other topics.
 
-- commonMistakes: string — the most frequent errors students make on this specific question, written as a paragraph.
-
-- examTips: string — specific exam technique advice for this question type.
-
 Return ONLY a valid JSON array. No markdown, no code fences, no extra text before or after.`;
 
             try {
@@ -3244,7 +3425,7 @@ Return ONLY a valid JSON array. No markdown, no code fences, no extra text befor
                 const payload = {
                     systemInstruction: { parts: [{ text: sysPrompt }] },
                     contents: [{ parts }],
-                    generationConfig: { responseMimeType: "application/json", temperature: 0.1 }
+                    generationConfig: { responseMimeType: "application/json", temperature: 0.1, maxOutputTokens: 65536 }
                 };
 
                 const data = await callGeminiAPI(payload, 150000); // 150s for full PDF analysis
@@ -3271,7 +3452,7 @@ Return ONLY a valid JSON array. No markdown, no code fences, no extra text befor
                 const locked = window.extractedClassifications || {};
                 const lockMisses = [];
                 results = results.map(q => {
-                    let finalType = (q.currType === 'Core' || q.currType === 'Extended' || q.currType === 'Core/Extended') ? q.currType : 'Core';
+                    let finalType = (q.currType === 'Core' || q.currType === 'Extended' || false /* Mixed removed */) ? q.currType : 'Core';
                     let matchedKey = null;
                     if (q.qID) {
                         // 1. exact match
@@ -3356,7 +3537,7 @@ Return ONLY a valid JSON array. No markdown, no code fences, no extra text befor
 
                 const coreN = results.filter(q=>q.currType==='Core'||q.currType==='Core/Extended').length;
                 const extN  = results.filter(q=>q.currType==='Extended'||q.currType==='Core/Extended').length;
-                const pureCore=results.filter(q=>q.currType==='Core').length;const pureExt=results.filter(q=>q.currType==='Extended').length;const pureMix=results.filter(q=>q.currType==='Core/Extended').length;
+                const pureCore=results.filter(q=>q.currType==='Core').length;const pureExt=results.filter(q=>q.currType==='Extended'||q.currType==='Core/Extended').length;const pureMix=0;
                 showModal('✅ Analysis Complete',`${results.length} questions:\n🔵 Core: ${pureCore}\n🟠 Extended: ${pureExt}${pureMix>0?'\n🔵🟠 Core/Extended: '+pureMix:''}\n🟥 Removed: ${removed.length}\n\nTotal: ${pureCore+pureExt+pureMix+removed.length}`);
 
             } catch (e) {
@@ -3545,7 +3726,7 @@ Return ONLY a valid JSON array. No markdown, no code fences, no extra text befor
                 return sorted.map(q => {
                     const isRem = q.status === 'removed';
                     const pc = isRem ? 'bg-red-100 text-red-700'
-                        : q.type === 'Core/Extended' ? 'bg-purple-100 text-purple-700'
+                        : q.false /* Mixed removed */ ? 'bg-purple-100 text-purple-700'
                         : q.type === 'Core' || q.type === 'Unit 1' ? 'bg-blue-100 text-blue-700'
                         : 'bg-orange-100 text-orange-700';
                     return '<span class="inline-block ' + pc + ' text-[9px] font-bold px-1.5 py-0.5 rounded mr-0.5 mb-0.5">'
@@ -3656,8 +3837,8 @@ Return ONLY a valid JSON array. No markdown, no code fences, no extra text befor
             // Update card panel class in-place
             const card = document.querySelector('[data-question-id="'+qID+'"]');
             if (card) {
-                card.classList.remove('core-panel','extended-panel','mixed-panel');
-                card.classList.add(newType==='Extended'?'extended-panel':newType==='Core/Extended'?'mixed-panel':'core-panel');
+                card.classList.remove('core-panel','extended-panel');
+                card.classList.add(newType==='Extended'?'extended-panel':'core-panel');
             }
             // Update studyNote span text + colour
             const card2 = document.querySelector('[data-question-id="'+qID+'"]');
@@ -3854,10 +4035,116 @@ Return ONLY a valid JSON array. No markdown, no code fences, no extra text befor
                     let tbl='<table style="border-collapse:collapse;font-size:11px;margin:6px 0;width:auto">';
                     drows.forEach((l,ri)=>{const cells=pc(l);tbl+='<tr>';cells.forEach(cell=>{const tag=ri===0?'th':'td';const sty=ri===0?'background:#1e293b;color:white;padding:4px 10px;font-weight:700;font-size:10px;border:1px solid #334155':'padding:4px 10px;border:1px solid #cbd5e1;font-size:11px;background:white';tbl+=`<${tag} style="${sty}">${cell||'&nbsp;'}</${tag}>`;});tbl+='</tr>';});
                     tbl+='</table>'; out+=tbl;
-                } else { out+=(line||'')+'<br>'; i++; }
+                } else {
+                    // Bold Q[n]([part]): prefix + dots → answer lines
+                    let boldLine = (line||'')
+                        .replace(/^(Q\d+(?:\([^)]+\))*):/, '<span style="font-weight:700;color:#1e293b">$1</span>:')
+                        .replace(/\.{6,}/g, '<span style="display:inline-block;min-width:120px;border-bottom:1.5px solid #94a3b8;margin:0 2px">&nbsp;</span>')
+                        .replace(/_{6,}/g,   '<span style="display:inline-block;min-width:120px;border-bottom:1.5px solid #94a3b8;margin:0 2px">&nbsp;</span>');
+                    out += boldLine + '<br>';
+                    i++;
+                }
             }
             return out.replace(/(<br>)+$/,'');
         }
+        // ── renderQText: render HTML question text from analysis ─────────────────
+        function renderQText(text, qID) {
+            if (!text) return '';
+
+            // ── HTML from analysis (new format) — render directly ─────────────
+            if (/<(div|p|table|span|strong|em)/i.test(text)) {
+                const clean = text
+                    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+                    .replace(/on\w+="[^"]*"/gi, '');
+                const prefix = '<span style="font-weight:700;font-size:12px;color:#64748b;margin-right:4px">Q' + qID + ':</span>';
+                return '<div style="font-size:13px;line-height:1.7">' + prefix + clean + '</div>';
+            }
+
+            // ── Plain text from analysis (legacy / fallback) ──────────────────
+            // Process pipe tables → HTML table
+            function pipeTablesToHTML(input) {
+                const lines = input.split('\n');
+                let out = '', i = 0;
+                while (i < lines.length) {
+                    const line = lines[i];
+                    const isPipe = /^\s*\|/.test(line) && (line.match(/\|/g)||[]).length >= 2;
+                    if (isPipe) {
+                        const tls = [];
+                        while (i < lines.length) {
+                            const tl = lines[i];
+                            if ((/^\s*\|/.test(tl) && (tl.match(/\|/g)||[]).length >= 2) || /^[\s|:\-]+$/.test(tl)) {
+                                tls.push(tl); i++;
+                            } else break;
+                        }
+                        const dataRows = tls.filter(l => !/^[\s|:\-]+$/.test(l));
+                        if (!dataRows.length) continue;
+                        const parseCells = l => l.replace(/^\s*\|/, '').replace(/\|\s*$/, '').split('|').map(s => s.trim());
+                        let tbl = '<table class="q-table" style="margin:8px 0">';
+                        dataRows.forEach((l, ri) => {
+                            const cells = parseCells(l);
+                            tbl += '<tr>' + cells.map(cell => {
+                                const tag = ri === 0 ? 'th' : 'td';
+                                const sty = ri === 0
+                                    ? 'background:#1e3a5f;color:#dbeafe;padding:4px 8px;font-weight:500;border:0.5px solid #1e40af;text-align:left;font-size:11.5px'
+                                    : 'padding:4px 8px;border:0.5px solid #e2e8f0;color:#334155;font-size:11.5px';
+                                return '<' + tag + ' style="' + sty + '">' + (cell || '&nbsp;') + '</' + tag + '>';
+                            }).join('') + '</tr>';
+                        });
+                        out += tbl + '</table>';
+                    } else {
+                        // Replace answer dots with drawn line
+                        let ln = (line || '')
+                            .replace(/\.{6,}/g, '<span class="q-ans-line"></span>')
+                            .replace(/_{6,}/g,   '<span class="q-ans-line"></span>')
+                            .replace(/\/\//g, ' ');
+                        out += ln + '<br>';
+                        i++;
+                    }
+                }
+                return out.replace(/(<br>)+$/, '');
+            }
+
+            const prefix = '<span style="font-weight:700;color:#1e293b;margin-right:4px">Q' + qID + ':</span>';
+            const body = pipeTablesToHTML(text.replace(/\/\//g, ' ').replace(/[ \t]{2,}/g, ' '));
+            return '<div style="font-size:13px;line-height:1.7">' + prefix + body + '</div>';
+        }
+
+
+        // ── renderMSStructured: parse ✓/~/✗/ℹ️ prefixed mark scheme ─────────────
+        function renderMSStructured(ms) {
+            if (!ms) return '';
+            const lines = ms.split('\n').filter(l => l.trim());
+            // If no structured prefixes found, fall back to old formatMS
+            const hasStructured = lines.some(l => /^[✓~✗ℹ️]/.test(l.trim()));
+            if (!hasStructured) return formatMS(ms);
+            return lines.map(l => {
+                const t = l.trim();
+                if (!t) return '';
+                if (t.startsWith('✓')) return '<div class="ms-line"><span class="ms-icon ms-correct">✓</span><span class="ms-correct">' + t.slice(1).trim() + '</span></div>';
+                if (t.startsWith('~'))  return '<div class="ms-line"><span class="ms-icon ms-alt">~</span><span class="ms-alt">' + t.slice(1).trim() + '</span></div>';
+                if (t.startsWith('✗'))  return '<div class="ms-line"><span class="ms-icon ms-reject">✗</span><span class="ms-reject">' + t.slice(1).trim() + '</span></div>';
+                if (t.startsWith('ℹ️')) return '<div class="ms-line"><span class="ms-icon ms-note">ℹ️</span><span class="ms-note">' + t.replace(/^ℹ️\s*/,'') + '</span></div>';
+                // Untagged line — treat as correct point
+                return '<div class="ms-line"><span class="ms-icon ms-correct">✓</span><span class="ms-correct">' + t + '</span></div>';
+            }).join('');
+        }
+
+        // ── renderModelAnswer: numbered steps for calculations ─────────────────
+        function renderModelAnswer(model, marks) {
+            if (!model) return '';
+            const text = (model||'').replace(/\*\*(.*?)\*\*/g,'<b>$1</b>').replace(/\*/g,'');
+            // Detect numbered steps: "Step 1:", "1.", "1)" patterns
+            const isStepFormat = /^(step\s*\d+\s*[:.]|\d+[.)\s])/im.test(text);
+            if (!isStepFormat) return text.replace(/\n/g,'<br>');
+            const stepLines = text.split('\n').filter(l => l.trim());
+            return '<ol class="step-list">' + stepLines.map(l => {
+                const t = l.trim();
+                const m = t.match(/^(?:step\s*)?([\d]+)[.):]\s*(.*)/i);
+                if (m) return '<li class="step-item"><span class="step-num">' + m[1] + '</span><span>' + m[2] + '</span></li>';
+                return '<li class="step-item"><span style="flex:1">' + t + '</span></li>';
+            }).join('') + '</ol>';
+        }
+
         function renderCards(data, paperCode) {
             const container = document.getElementById('analysis-container');
             if (!container) return;
@@ -3865,18 +4152,36 @@ Return ONLY a valid JSON array. No markdown, no code fences, no extra text befor
             container.innerHTML = data.map((p, index) => {
                 const isCore    = p.currType==='Core';
                 const isExt     = p.currType==='Extended';
-                const isMixed   = p.currType==='Core/Extended';
-                const badgeClass     = isCore?'badge-core':isMixed?'badge-core':'badge-extended';
+                const isMixed   = false;
+                const badgeClass     = isCore?'badge-core':'badge-extended';
                 const diff = p.difficulty||'Medium';
                 const diffClass = diff==='Easy'?'bg-green-600 text-white border-green-700':diff==='Hard'?'bg-red-600 text-white border-red-700':'bg-amber-500 text-white border-amber-600';
                 const isRemoved       = p.syllabusStatus==='removed';
                 const statusBadgeClass = isRemoved?'badge-removed':'badge-current';
                 const statusBadge      = isRemoved?'🟥 REMOVED':'✅ CURRENT';
-                const panelClass       = isExt?'extended-panel':isMixed?'mixed-panel':'core-panel';
-                const studyIcon = isMixed?'🔵🟠':isCore?'🔵':'🟠';
-                const studyNote = isMixed?'🔵🟠 Core & Extended':isCore?'🔵 Core only':'🟠 Extended only';
+                const panelClass       = isExt?'extended-panel':'core-panel';
+                const studyIcon = isCore?'🔵':'🟠';
+                const studyNote = isCore?'🔵 Core only':'🟠 Extended only';
                 const highlightedText = p.text||'';
-                // highlighting removed — kept clean
+                // Pull parent stem from extraction console text
+                let parentStemHtml = '';
+                try {
+                    const qt = document.getElementById('question-text');
+                    const extTxt = qt ? qt.value : '';
+                    if (extTxt) {
+                        const parentMatch = extTxt.match(new RegExp('(?:^|\n)(Q' + (p.qID.match(/^(\d+)/)||['','1'])[1] + ':\\s*[^\n]+)', ''));
+                        if (parentMatch) {
+                            const stemLine = parentMatch[1]
+                                .replace(/^Q\d+:\s*/, '')
+                                .replace(/\[\d+\s*marks?\]/gi, '')
+                                .replace(/\[CORE\/EXTENDED\]/g, '')
+                                .replace(/\[CORE\]/g, '').replace(/\[EXTENDED\]/g, '')
+                                .replace(/\[(?:Topic )?[\d]+\.[\d]+[^\]]*\]/g, '')
+                                .replace(/\(no shared stem\)/g, '').trim();
+                            if (stemLine) parentStemHtml = '<div style="font-size:11px;color:#64748b;border-bottom:0.5px solid #e2e8f0;margin-bottom:6px;padding-bottom:5px;font-style:italic">' + stemLine + '</div>';
+                        }
+                    }
+                } catch(e) {}
                 const reasonNote = p.classificationReason ? `<span class="text-[9px] text-slate-400 ml-2" title="${p.classificationReason}">ℹ️</span>` : '';
                 return `
                 <div class="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm mb-6 ${panelClass} ${isRemoved?'border-2 border-rose-200':''}"
@@ -3893,13 +4198,13 @@ Return ONLY a valid JSON array. No markdown, no code fences, no extra text befor
                                 ${p.subtopicId ? (() => {
                                     const tNum = parseInt(p.subtopicId.split('.')[0]);
                                     const tName = TOPIC_NAMES[tNum] || p.topic || '';
-                                    const syllEntry = IGCSE_CHEMISTRY_SYLLABUS_2026[p.subtopicId];
+                                    const syllEntry = IGCSE_BIOLOGY_SYLLABUS_2026[p.subtopicId];
                                     const canonicalName = syllEntry ? syllEntry.name : (p.subTopic || p.topic || '');
                                     return `<span contenteditable="true" onblur="(function(el,qid){const q=currentResults.find(x=>x.qID===qid);if(q){const txt=el.innerText.trim();const m=txt.match(/(\\d+)/);if(m){const n=parseInt(m[1]);q.topic=TOPIC_NAMES[n]||txt;q.subtopicId=(q.subtopicId||qid).replace(/^\\d+/,String(n));}persistCurrentResults();renderSummary(currentResults,currentPaperCode);}})(this,'${p.qID}')" title="Click to edit topic number" class="inline-block bg-indigo-100 text-indigo-700 font-bold px-2 py-0.5 rounded-l text-[9px] cursor-text hover:bg-indigo-200 focus:outline-none focus:ring-1 focus:ring-indigo-400">Topic ${tNum}. ${tName}</span><span contenteditable="true" onblur="(function(el,qid){const q=currentResults.find(x=>x.qID===qid);if(q){const txt=el.innerText.replace(/^Sub-topic:\\s*/,'').trim();const m=txt.match(/^(\\d+\\.\\d+)\\s*(.*)/);if(m){q.subtopicId=m[1];q.subTopic=m[2]||q.subTopic;}else{q.subTopic=txt;}persistCurrentResults();renderSummary(currentResults,currentPaperCode);}})(this,'${p.qID}')" title="Click to edit subtopic (e.g. 21.1 Biotechnology)" class="inline-block bg-slate-200 text-slate-600 px-2 py-0.5 rounded-r text-[9px] cursor-text hover:bg-slate-300 focus:outline-none focus:ring-1 focus:ring-slate-400">Sub-topic: ${p.subtopicId} ${canonicalName}</span>`;
                                 })() : `<span contenteditable="true" onblur="(function(el,qid){const q=currentResults.find(x=>x.qID===qid);if(q){q.topic=el.innerText.trim();persistCurrentResults();renderSummary(currentResults,currentPaperCode);}})(this,'${p.qID}')" title="Click to edit topic" class="inline-block bg-slate-200 text-slate-600 px-2 py-0.5 rounded text-[9px] cursor-text hover:bg-slate-300 focus:outline-none focus:ring-1 focus:ring-slate-400">${p.topic||''}</span>`}
                             </div>
                             <div class="text-[9px] text-slate-400 mt-0.5 font-mono">${currentPaperCode ? currentPaperCode+'/' : ''}Q${p.qID} [<span contenteditable="true" onblur="(function(el,qid){const q=currentResults.find(x=>x.qID===qid);if(q){const n=parseInt(el.innerText);if(!isNaN(n)){q.marks=n;persistCurrentResults();el.innerText=String(n);}else{el.innerText=String(q.marks||'?');}}})(this,'${p.qID}')" title="Click to edit marks" class="cursor-text hover:text-slate-600 focus:outline-none focus:underline">${p.marks||'?'}</span> marks] [<span class="ref-type-label">${p.currType==='Core/Extended'?'CORE/EXTENDED':p.currType==='Core'?'CORE':'EXTENDED'}</span>]</div>
-                            <span class="text-[10px] ${isMixed?'text-purple-600':isCore?'text-blue-600':'text-orange-600'} font-bold study-note-span">${studyNote}${reasonNote}</span>
+                            <span class="text-[10px] ${isCore?'text-blue-600':'text-orange-600'} font-bold study-note-span">${studyNote}${reasonNote}</span>
                         </div>
                         <div class="flex flex-col gap-1.5 items-end ml-4"><div class="flex gap-1 mb-1"><button onclick="toggleCard('${p.qID}')" class="card-collapse-btn text-[10px] px-1.5 py-0.5 bg-slate-100 hover:bg-slate-200 rounded border text-slate-500" title="Collapse">▼</button><button onclick="removeCard('${p.qID}')" class="text-[10px] px-1.5 py-0.5 bg-rose-50 hover:bg-rose-100 rounded border border-rose-200 text-rose-400" title="Remove card">✕</button></div>
                             <select onchange="setQuestionType('${p.qID}',this.value)" data-sqid="${p.qID}"
@@ -3907,12 +4212,6 @@ Return ONLY a valid JSON array. No markdown, no code fences, no extra text befor
                                 style="appearance:auto">
                                 <option value="Core" ${p.currType==='Core'?'selected':''} style="background:#2563eb;color:#fff">🔵 Core</option>
                                 <option value="Extended" ${p.currType==='Extended'?'selected':''} style="background:#f97316;color:#fff">🟠 Extended</option>
-                                <option value="Core/Extended" ${p.currType==='Core/Extended'?'selected':''} style="background:#7c3aed;color:#fff">🔵🟠 Core/Extended</option>
-                            </select>
-                            <div class="flex gap-1.5 items-center">
-                                <select onchange="setQuestionStatus('${p.qID}',this.value)"
-                                    class="text-[10px] font-bold px-1.5 py-0.5 rounded border cursor-pointer focus:outline-none ${isRemoved?'bg-rose-600 text-white border-rose-700':'bg-emerald-600 text-white border-emerald-700'}"
-                                    style="appearance:auto">
                                     <option value="current" ${!isRemoved?'selected':''} style="background:#059669;color:#fff">✅ Current</option>
                                     <option value="removed" ${isRemoved?'selected':''} style="background:#e11d48;color:#fff">🟥 Removed</option>
                                 </select>
@@ -3937,7 +4236,7 @@ Return ONLY a valid JSON array. No markdown, no code fences, no extra text befor
                         <div contenteditable="true" data-qid="${p.qID}" data-field="text"
                             oninput="saveField('${p.qID}','text',this)"
                             class="text-sm text-slate-700 p-4 bg-slate-50 rounded-xl border font-mono leading-relaxed focus:outline-none focus:ring-2 focus:ring-indigo-300"
-                            style="min-height:48px;white-space:normal">${renderQuestionText('<b>Q' + p.qID + ':</b> ' + highlightedText)}</div>
+                            style="min-height:48px;white-space:normal">${parentStemHtml}${renderQText(highlightedText, p.qID)}</div>
                     </div>
 
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -3947,7 +4246,7 @@ Return ONLY a valid JSON array. No markdown, no code fences, no extra text befor
                             </h4>
                             <div contenteditable="true" data-qid="${p.qID}" data-field="ms"
                                 oninput="saveField('${p.qID}','ms',this)"
-                                class="text-xs text-slate-600 p-3 bg-slate-50 rounded-lg border focus:outline-none focus:ring-2 focus:ring-slate-300" style="line-height:1.7;min-height:40px;white-space:pre-wrap">${formatMS(p.ms)}</div>
+                                class="text-xs text-slate-600 p-3 bg-slate-50 rounded-lg border focus:outline-none focus:ring-2 focus:ring-slate-300" style="line-height:1.65;min-height:40px">${renderMSStructured(p.ms)}</div>
                         </div>
                         <div>
                             <h4 class="text-xs font-semibold text-slate-400 uppercase mb-2">Model Answer:
@@ -3955,7 +4254,7 @@ Return ONLY a valid JSON array. No markdown, no code fences, no extra text befor
                             </h4>
                             <div contenteditable="true" data-qid="${p.qID}" data-field="model"
                                 oninput="saveField('${p.qID}','model',this)"
-                                class="bg-indigo-50 p-3 rounded-lg text-xs border border-indigo-100 leading-relaxed focus:outline-none focus:ring-2 focus:ring-indigo-300" style="min-height:40px;white-space:pre-wrap">${(p.model||'').replace(/\*\*(.*?)\*\*/g,'<b>$1</b>').replace(/\*/g,'').replace(/\n/g,'<br>')}</div>
+                                class="bg-indigo-50 p-3 rounded-lg text-xs border border-indigo-100 leading-relaxed focus:outline-none focus:ring-2 focus:ring-indigo-300" style="min-height:40px">${renderModelAnswer(p.model, p.marks)}</div>
                         </div>
                     </div>
 
@@ -4000,13 +4299,7 @@ Return ONLY a valid JSON array. No markdown, no code fences, no extra text befor
                             class="text-xs text-slate-700 leading-relaxed focus:outline-none focus:ring-2 focus:ring-slate-400 rounded p-1" style="min-height:32px;white-space:pre-wrap">${(p.teacherNotes||'').replace(/\n/g,'<br>')}</div>
                     </div>
 
-                    ${p.tutorNote&&p.tutorNote.trim()?`
-                    <div class="mt-4 p-3 rounded-lg border border-violet-200 bg-violet-50">
-                        <h4 class="text-xs font-semibold text-violet-700 uppercase mb-2">🎓 Tutor Note:</h4>
-                        <div contenteditable="true" data-qid="${p.qID}" data-field="tutorNote"
-                            oninput="saveField('${p.qID}','tutorNote',this)"
-                            class="text-xs text-violet-900 leading-relaxed focus:outline-none focus:ring-2 focus:ring-violet-300 rounded p-1" style="min-height:32px;white-space:pre-wrap">${p.tutorNote.replace(/\n/g,'<br>')}</div>
-                    </div>`:''}
+                    
 
                     <div class="mt-3 flex justify-between items-center">
                         <span class="text-[10px] text-slate-400">Q${index+1} of ${data.length}</span>
@@ -4076,9 +4369,9 @@ Return ONLY a valid JSON array. No markdown, no code fences, no extra text befor
                 addText('IGCSE Analysis Report', 18, true);
                 addText(`Paper: ${subject}`, 12);
                 addText(`Generated: ${new Date().toLocaleString()}`, 10);
-                addText(`Cambridge IGCSE Chemistry 0620 (2026-2028) — IGCSE Processor v51.0`, 9);
+                addText(`Cambridge IGCSE Biology 0610 (2026-2028) — IGCSE Processor v51.0`, 9);
                 yPos+=5;
-                const coreN = currentResults.filter(q=>q.currType==='Core'||q.currType==='Core/Extended').length;
+                const coreN = currentResults.filter(q=>q.currType==='Core').length;
                 const extN  = currentResults.filter(q=>q.currType==='Extended'||q.currType==='Core/Extended').length;
                 const remN  = currentResults.filter(q=>q.syllabusStatus==='removed').length;
                 const totalM = sourceResults.reduce((s,q)=>s+(parseInt(q.marks)||0),0);
@@ -4098,7 +4391,7 @@ Return ONLY a valid JSON array. No markdown, no code fences, no extra text befor
                     if (!pdfTopicStats[key]) { pdfTopicStats[key]={ id:q.subtopicId||'', topic:q.topic||'Other', qs:[], marks:0, cN:0, eN:0 }; pdfOrder.push(key); }
                     pdfTopicStats[key].qs.push(q.qID);
                     pdfTopicStats[key].marks += parseInt(q.marks)||0;
-                    if (q.currType==='Core'||q.currType==='Core/Extended') pdfTopicStats[key].cN++; else pdfTopicStats[key].eN++;
+                    if (q.currType==='Core') pdfTopicStats[key].cN++; else pdfTopicStats[key].eN++;
                 });
                 const pdfPre = currentPaperCode ? currentPaperCode+'/' : '';
                 // Keep exam chronological order — pdfOrder is built by forEach so already in sequence
@@ -4186,8 +4479,7 @@ Return ONLY a valid JSON array. No markdown, no code fences, no extra text befor
                     addSection('Common Mistakes:',    q.commonMistakes, [185,28,28],  [185,28,28]);
                     addSection('Exam Tips:',          q.examTips,       [5,150,105],  [5,150,105]);
                     addSection('Feedback:',           q.feedback,       [100,116,139],[100,116,139]);
-                    addSection('Tutor Note:',         q.tutorNote,      [109,40,217], [109,40,217]);
-
+                    
                     pdf.setTextColor(0, 0, 0);
                 });;
                                 const safeName = buildReportFilename(currentPaperCode || subject || 'Unknown', 'Analysis_Report', sortMode, _unitFilter);
@@ -4267,7 +4559,7 @@ Return ONLY a valid JSON array. No markdown, no code fences, no extra text befor
             // Use requestAnimationFrame to ensure all DOM elements are painted
             // before manipulating them (avoids hidden-banner timing bugs on slow browsers)
             requestAnimationFrame(() => {
-                const saved = localStorage.getItem('igcse_chem_key');
+                const saved = localStorage.getItem('igcse_key');
                 if (saved) { document.getElementById('api-key').value = saved; validateApiKeyInput(); checkInputs(); }
                 if (localStorage.getItem('darkMode') === 'true') {
                     document.body.classList.add('dark-mode');
@@ -4307,14 +4599,14 @@ Return ONLY a valid JSON array. No markdown, no code fences, no extra text befor
                 const lines = extractedText.split('\n').filter(l => l.trim());
                 const tbody = document.getElementById('review-table-body');
                 const subjectBadge = document.getElementById('review-subject-badge');
-                if (subjectBadge) subjectBadge.textContent = currentSubject || 'Chemistry 0620';
+                if (subjectBadge) subjectBadge.textContent = currentSubject || 'Biology 0610';
 
                 let coreN = 0, extN = 0, mixedN = 0;
                 const rows = lines.map((line, i) => {
                     // Parse: Q...: text [X marks] [TYPE] [Topic N.N Name]
-                    let mFull = line.match(/^(Q[^:]+):\s*(.*?)\[(\d+)\s*marks?\]\s*\[(CORE\/EXTENDED|CORE|EXTENDED)\]\s*(?:\[Topic\s+([^\]]+)\])?/i);
+                    let mFull = line.match(/^(Q\d+(?:\([^)]+\))+):\s*(.*?)\[(\d+)\s*marks?\]\s*\[(CORE\/EXTENDED|CORE|EXTENDED)\]\s*(?:\[Topic\s+([^\]]+)\])?/i);
                     if (!mFull) {
-                        const mNoMarks = line.match(/^(Q[^:]+):\s*(.*?)\s*\[(CORE\/EXTENDED|CORE|EXTENDED)\]\s*(?:\[Topic\s+([^\]]+)\])?/i);
+                        const mNoMarks = line.match(/^(Q\d+(?:\([^)]+\))+):\s*(.*?)\s*\[(CORE\/EXTENDED|CORE|EXTENDED)\]\s*(?:\[Topic\s+([^\]]+)\])?/i);
                         if (mNoMarks) {
                             const mMarks = line.match(/\[(\d+)\s*marks?\]|\((\d+)\s*marks?\)|\s(\d+)\s+marks?/i);
                             const foundMarks = mMarks ? (mMarks[1]||mMarks[2]||mMarks[3]) : '?';
@@ -4323,25 +4615,16 @@ Return ONLY a valid JSON array. No markdown, no code fences, no extra text befor
                     }
                     if (!mFull) return '';
                     const [, qid, qtext, marks, rawType, topic] = mFull;
-                    let type = rawType.toUpperCase() === 'CORE/EXTENDED' ? 'Core/Extended' : rawType.toUpperCase() === 'CORE' ? 'Core' : 'Extended';
-                    if (topic) {
-                        const topicId = topic.trim().match(/^([\d]+\.[\d]+)/)?.[1];
-                        const syllEntry = topicId && typeof IGCSE_CHEMISTRY_SYLLABUS_2026 !== 'undefined' && IGCSE_CHEMISTRY_SYLLABUS_2026[topicId];
-                        if (syllEntry) {
-                            const hasCore = syllEntry.core && syllEntry.core.length > 0;
-                            const hasSupp = syllEntry.supplement && syllEntry.supplement.length > 0;
-                            if (!hasCore && hasSupp) type = 'Extended';
-                            else if (hasCore && !hasSupp) type = 'Core';
-                        }
-                    }
-                    if (type === 'Core' || type === 'Core/Extended') coreN++;
-                    if (type === 'Extended' || type === 'Core/Extended') extN++;
-                    if (type === 'Core/Extended') mixedN++;
+                    let type = rawType.toUpperCase() === 'CORE' ? 'Core' : 'Extended';
+                    // Trust the extracted [CORE/EXTENDED] type — no syllabus override
+                    if (type === 'Core' || false /* Mixed removed */) coreN++;
+                    if (type === 'Extended' || false /* Mixed removed */) extN++;
+                    if (false /* Mixed removed */) mixedN++;
                     const preview = qtext.length > 80 ? qtext.substring(0, 80) + '\u2026' : qtext;
-                    const typeSel = ['Core','Extended','Core/Extended'].map(t =>
-                        `<option value="${t}" ${t===type?'selected':''}>${t==='Core'?'\uD83D\uDD35 Core':t==='Extended'?'\uD83D\uDFE0 Extended':'\uD83D\uDD35\uD83D\uDFE0 Mixed'}</option>`
+                    const typeSel = ['Core','Extended'].map(t =>
+                        `<option value="${t}" ${t===type?'selected':''}>${t==='Core'?'\uD83D\uDD35 Core':'\uD83D\uDFE0 Extended'}</option>`
                     ).join('');
-                    const rowBg = type==='Core'?'#eff6ff':type==='Extended'?'#fff7ed':'#faf5ff';
+                    const rowBg = type==='Core'?'#eff6ff':'#fff7ed';
                     return `<tr style="background:${rowBg};border-bottom:1px solid #f1f5f9" data-review-row="${i}">
                         <td class="px-3 py-2 font-mono font-bold text-slate-700">${qid}</td>
                         <td class="px-3 py-2 text-slate-600">${preview}</td>
@@ -4349,7 +4632,7 @@ Return ONLY a valid JSON array. No markdown, no code fences, no extra text befor
                         <td class="px-3 py-2">
                             <select onchange="updateReviewType(${i},this.value,this)"
                                 class="text-[10px] font-bold px-2 py-1 rounded border w-full"
-                                style="background:${type==='Core'?'#2563eb':type==='Extended'?'#ea580c':'#7c3aed'};color:white">
+                                style="background:${type==='Core'?'#2563eb':type==='Extended'?'#ea580c':'#0284c7'};color:white">
                                 ${typeSel}
                             </select>
                         </td>
@@ -4375,7 +4658,7 @@ Return ONLY a valid JSON array. No markdown, no code fences, no extra text befor
             // Update row background
             const row = document.querySelector(`tr[data-review-row="${rowIdx}"]`);
             if (row) row.style.background = newType==='Core'?'#eff6ff':newType==='Extended'?'#fff7ed':'#faf5ff';
-            if (sel) sel.style.background = newType==='Core'?'#2563eb':newType==='Extended'?'#ea580c':'#7c3aed';
+            if (sel) sel.style.background = newType==='Core'?'#2563eb':newType==='Extended'?'#ea580c':'#0284c7';
             // Update the pending extracted text line
             const lines = _pendingExtractedText.split('\n');
             let count = -1;

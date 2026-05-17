@@ -133,6 +133,7 @@
         // Global Variables
         // ======================================================================
         let uploadedFiles = {};
+        let analysisHistory = JSON.parse(localStorage.getItem('edexcel_history')) || [];
         let currentResults = [];
         let currentPaperCode = '';
         let currentSubject = null;
@@ -191,7 +192,6 @@ RULE: classify [UNIT1] or [UNIT2] based on which topic the question tests. Both 
             return 0;
         }
         let isAnalyzing = false;
-        let isExtracting = false;
 
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
@@ -986,6 +986,7 @@ RULE: classify [UNIT1] or [UNIT2] based on which topic the question tests. Both 
         const API_MODELS = [
             "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=",
             "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=",
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=",
         ];
 
         const PROVIDER_CONFIGS = {
@@ -1191,6 +1192,8 @@ RULE: classify [UNIT1] or [UNIT2] based on which topic the question tests. Both 
                 </div>
             </div>
             <div class="flex gap-2 flex-wrap justify-center no-print">
+                
+                <button onclick="toggleHistory()" class="bg-slate-100 text-slate-600 px-3 py-2 rounded-xl font-bold text-xs uppercase hover:bg-indigo-50 hover:text-indigo-600 transition">📋 History</button>
                 <button onclick="toggleDarkMode()" class="bg-slate-100 text-slate-600 px-3 py-2 rounded-xl font-bold text-xs uppercase hover:bg-indigo-50 hover:text-indigo-600 transition">🌙 Dark</button>
                 
                 <button onclick="showStudyGuide()" class="bg-slate-100 text-slate-600 px-3 py-2 rounded-xl font-bold text-xs uppercase hover:bg-purple-50 hover:text-purple-600 transition">📖 Study Guide</button>
@@ -1254,6 +1257,18 @@ RULE: classify [UNIT1] or [UNIT2] based on which topic the question tests. Both 
         <div id="syllabus-warnings" class="mb-4"></div>
 
         <!-- History Sidebar -->
+        <div id="history-sidebar" class="fixed right-0 top-0 h-full w-96 bg-white shadow-2xl transform translate-x-full transition-transform duration-300 z-40 overflow-y-auto p-6 no-print">
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="font-black text-lg">Analysis History</h3>
+                <button onclick="toggleHistory()" class="text-slate-400 hover:text-slate-600">✕</button>
+            </div>
+            <div id="compare-bar" style="display:none" class="mb-3 p-2 bg-indigo-50 border border-indigo-200 rounded-lg text-xs flex items-center flex-wrap gap-1"></div>
+            <div id="history-list" class="space-y-3"></div>
+            <div class="mt-4 flex gap-2">
+                <button onclick="clearHistory()" class="flex-1 text-xs text-rose-600 border border-rose-200 rounded-lg py-2 hover:bg-rose-50">Clear History</button>
+                <button onclick="exportHistory()" class="flex-1 text-xs text-indigo-600 border border-indigo-200 rounded-lg py-2 hover:bg-indigo-50">Export History</button>
+            </div>
+        </div>
 <div class="text-xs space-y-3 max-h-96 overflow-y-auto">
             <div class="flex items-center gap-3">
                 <span class="text-2xl">✅</span>
@@ -1264,10 +1279,14 @@ RULE: classify [UNIT1] or [UNIT2] based on which topic the question tests. Both 
             </div>
             <div class="bg-indigo-100 p-4 rounded-xl">
                 <div class="flex justify-between items-center mb-2">
-                    <label class="block text-[10px] font-black text-indigo-400 uppercase tracking-widest">Gemini API Key</label>
+                    <label class="block text-[10px] font-black text-indigo-400 uppercase tracking-widest">API Provider</label>
                     <span id="api-validation-badge" class="text-[10px] px-2 py-1 rounded-full bg-slate-200 text-slate-600">Not Validated</span>
                 </div>
-                <div class="text-xs font-bold text-indigo-600 mb-3 py-2">🟦 Google Gemini (Free — Recommended)</div>
+                <select id="api-provider" onchange="onProviderChange()" class="w-full p-2 border border-indigo-200 rounded-xl text-sm mb-3 bg-white font-bold">
+                    <option value="gemini">🟦 Google Gemini (Free — Recommended)</option>
+                    <option value="openrouter">🟣 OpenRouter (Free models available)</option>
+                    <option value="nvidia">🟩 NVIDIA build.nvidia.com (Free credits)</option>
+                </select>
                 <div class="api-input-container">
                     <input type="password" id="api-key" class="api-input w-full p-3 bg-white border border-indigo-200 rounded-xl outline-none transition font-mono text-sm" placeholder="Paste AIza... key here" oninput="validateApiKeyInput(); saveApiKey(); checkInputs();">
                     <span class="eye-icon" onclick="toggleApiKeyVisibility()">
@@ -1275,6 +1294,9 @@ RULE: classify [UNIT1] or [UNIT2] based on which topic the question tests. Both 
                             <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle>
                         </svg>
                     </span>
+                </div>
+                <div id="provider-model-row" class="mt-2 hidden">
+                    <select id="api-model-select" class="w-full p-2 border border-indigo-200 rounded-xl text-xs bg-white" onchange="saveApiKey()"></select>
                 </div>
                 <div class="flex justify-between mt-2">
                     <p id="provider-help-text" class="text-[10px] text-indigo-400">Get your free key at <a href="https://makersuite.google.com/app/apikey" target="_blank" class="underline">Google AI Studio</a></p>
@@ -1310,7 +1332,7 @@ RULE: classify [UNIT1] or [UNIT2] based on which topic the question tests. Both 
                     <span id="extraction-status" class="text-[10px] font-bold text-slate-400 italic">⏳ WAITING FOR SYLLABUS</span><button id="review-classifications-btn" onclick="openReviewModal(document.getElementById('question-text')?.value||'')" class="hidden ml-2 text-[10px] bg-indigo-600 text-white px-3 py-1 rounded-lg font-bold hover:bg-indigo-700 transition" title="Review and edit Unit 1/Unit 2 classifications before Analysis">🔍 Review Classifications</button>
                 </div>
                 <textarea id="question-text" class="hidden" readonly></textarea>
-                <div id="question-console-rendered" class="w-full p-5 bg-transparent text-sm font-mono text-slate-600 overflow-y-auto min-h-[120px]" style="max-height:600px">
+                <div id="question-console-rendered" class="w-full p-5 bg-transparent text-sm font-mono text-slate-600 overflow-y-auto max-h-64 min-h-[120px]">
                     <span class="text-slate-400 text-xs italic">After uploading the Exam PDF, questions will appear here annotated with [UNIT1], [UNIT2], marks and topic labels…</span>
                 </div>
             </div>
@@ -1334,7 +1356,7 @@ RULE: classify [UNIT1] or [UNIT2] based on which topic the question tests. Both 
                 </div>
             </div>
 
-            <div class="flex gap-2 justify-center flex-wrap items-center">
+            <div class="flex gap-2 justify-end flex-wrap">
                 <button onclick="exportCSV()" class="text-xs bg-slate-100 px-3 py-1.5 rounded-lg hover:bg-slate-200 transition">📊 Export CSV</button>
                 <button onclick="exportJSON()" class="text-xs bg-slate-100 px-3 py-1.5 rounded-lg hover:bg-slate-200 transition">📋 Export JSON</button>
                 <button onclick="exportEditableHTML()" class="text-xs bg-emerald-600 text-white px-3 py-1.5 rounded-lg hover:bg-emerald-700 transition font-bold">📝 Editable HTML</button>
@@ -1348,8 +1370,8 @@ RULE: classify [UNIT1] or [UNIT2] based on which topic the question tests. Both 
                     <button onclick="printReport('topic')" class="text-xs bg-slate-100 px-3 py-1.5 rounded-lg hover:bg-slate-200 transition" title="Print grouped by topic">🖨️ Print Topic</button>
                     <button onclick="downloadTextPDF('exam')" class="text-xs bg-slate-800 text-white px-3 py-1.5 rounded-lg hover:bg-slate-700 transition" title="PDF extract in exam order">📄 PDF Exam</button>
                     <button onclick="downloadTextPDF('topic')" class="text-xs bg-slate-700 text-white px-3 py-1.5 rounded-lg hover:bg-slate-600 transition" title="PDF extract in topic order">📄 PDF Topic</button>
-                    <button onclick="printStudentReport('exam')" class="text-xs bg-indigo-100 text-indigo-700 px-3 py-1.5 rounded-lg hover:bg-indigo-200 transition" title="Student report in exam order">🎓 Report Exam</button>
-                    <button onclick="printStudentReport('topic')" class="text-xs bg-violet-100 text-violet-700 px-3 py-1.5 rounded-lg hover:bg-violet-200 transition" title="Student report by topic">🎓 Report Topic</button>
+                    <button onclick="printStudentReport('exam')" class="text-xs bg-indigo-100 text-indigo-700 px-3 py-1.5 rounded-lg hover:bg-indigo-200 transition" title="Student report in exam order">🎓 Report (Exam Order)</button>
+                    <button onclick="printStudentReport('topic')" class="text-xs bg-violet-100 text-violet-700 px-3 py-1.5 rounded-lg hover:bg-violet-200 transition" title="Student report by topic">🎓 Report (Topic Order)</button>
                 </div>
             </div>
 
@@ -1711,7 +1733,9 @@ RULE: classify [UNIT1] or [UNIT2] based on which topic the question tests. Both 
                         const reason = result?.candidates?.[0]?.finishReason;
                         if (reason === 'MAX_TOKENS') {
                             const tokensUsed = result?.usageMetadata?.totalTokenCount || '?';
-                            throw new Error(`⚠️ Response truncated (MAX_TOKENS at ${tokensUsed} tokens).\n\nGemini hit the output limit mid-response — the JSON or text is incomplete.\n\n💡 This paper may be too long for a single request. Try:\n• Uploading fewer questions (split the paper)\n• Switching to gemini-2.5-flash-lite (faster, higher rate limit)`);
+                            console.warn(`[API] MAX_TOKENS at ${tokensUsed} tokens — attempting to use partial response`);
+                            // Return the partial result and let sanitiseJSON close the truncated JSON
+                            return result;
                         }
                         return result;
                     }
@@ -1724,6 +1748,25 @@ RULE: classify [UNIT1] or [UNIT2] based on which topic the question tests. Both 
                         // Wait longer before trying next model on quota errors
                         await new Promise(r => setTimeout(r, 5000));
                     } else if (response.status === 503) {
+                        // Retry same model once after 8s before moving to next
+                        console.warn(`[API] 503 on ${modelName} — retrying in 8s`);
+                        await new Promise(r => setTimeout(r, 8000));
+                        try {
+                            const retry = await fetchWithTimeout(API_MODELS[i] + apiKey, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify(payload)
+                            }, timeoutMs);
+                            if (retry.ok) {
+                                const retryResult = await retry.json();
+                                const retryReason = retryResult?.candidates?.[0]?.finishReason;
+                                if (retryReason === 'MAX_TOKENS') {
+                                    console.warn('[API] MAX_TOKENS on retry — using partial response');
+                                    return retryResult;
+                                }
+                                return retryResult;
+                            }
+                        } catch (retryErr) { /* fall through */ }
                         errors.push(`🔄 ${modelName}: Server overloaded — try again in a few minutes`);
                     } else if (response.status === 400) {
                         errors.push(`⚠️ ${modelName}: Bad request — ${msg.substring(0, 60)}`);
@@ -1745,6 +1788,154 @@ RULE: classify [UNIT1] or [UNIT2] based on which topic the question tests. Both 
 
 
 
+        function toggleHistory() { document.getElementById('history-sidebar')?.classList.toggle('translate-x-full'); renderHistory(); }
+
+        let compareSelection = [];
+
+        function selectForCompare(id) {
+            const item = analysisHistory.find(h => h.id === id);
+            if (!item) return;
+            const idx = compareSelection.findIndex(x => x.id === id);
+            if (idx >= 0) {
+                compareSelection.splice(idx, 1);
+            } else {
+                if (compareSelection.length >= 2) compareSelection.shift();
+                compareSelection.push(item);
+            }
+            // Update button states
+            document.querySelectorAll('[data-compare-id]').forEach(btn => {
+                const bid = parseInt(btn.getAttribute('data-compare-id'));
+                const sel = compareSelection.some(x => x.id === bid);
+                btn.style.background = sel ? '#6366f1' : '';
+                btn.style.color = sel ? 'white' : '';
+                btn.textContent = sel ? '✓ Selected' : '⚖️ Compare';
+            });
+            // Update compare bar
+            const bar = document.getElementById('compare-bar');
+            if (bar) {
+                if (compareSelection.length === 1) {
+                    bar.style.display = 'block';
+                    bar.innerHTML = '<span class="text-xs text-indigo-700">1 selected — pick a 2nd paper to compare</span>';
+                } else if (compareSelection.length === 2) {
+                    bar.style.display = 'block';
+                    bar.innerHTML = '<span class="text-xs text-indigo-700">Comparing: <b>'+compareSelection[0].subject+'</b> vs <b>'+compareSelection[1].subject+'</b></span>'
+                        + '<button onclick="runComparison()" class="ml-2 text-xs bg-indigo-600 text-white px-3 py-1 rounded-lg hover:bg-indigo-700">⚖️ Compare now</button>'
+                        + '<button onclick="compareSelection=[];renderHistory();" class="ml-1 text-xs text-slate-400 hover:text-slate-600">✕ Clear</button>';
+                } else {
+                    bar.style.display = 'none';
+                }
+            }
+        }
+
+        function runComparison() {
+            if (compareSelection.length < 2) return;
+            const [a, b] = compareSelection;
+            const aq = a.results || [];
+            const bq = b.results || [];
+            // Build topic maps
+            const topicsA = {}, topicsB = {};
+            aq.forEach(q => { const k=q.subtopicId||q.topic||'?'; if(!topicsA[k]) topicsA[k]={name:q.subTopic||q.topic||k,core:0,ext:0,marks:0}; if(q.currType==='Unit 1')topicsA[k].core++;else topicsA[k].ext++; topicsA[k].marks+=parseInt(q.marks)||0; });
+            bq.forEach(q => { const k=q.subtopicId||q.topic||'?'; if(!topicsB[k]) topicsB[k]={name:q.subTopic||q.topic||k,core:0,ext:0,marks:0}; if(q.currType==='Unit 1')topicsB[k].core++;else topicsB[k].ext++; topicsB[k].marks+=parseInt(q.marks)||0; });
+            const allKeys = [...new Set([...Object.keys(topicsA),...Object.keys(topicsB)])].sort();
+            const shared = allKeys.filter(k => topicsA[k] && topicsB[k]);
+            const onlyA  = allKeys.filter(k => topicsA[k] && !topicsB[k]);
+            const onlyB  = allKeys.filter(k => !topicsA[k] && topicsB[k]);
+
+            const rows = allKeys.map(k => {
+                const ta = topicsA[k], tb = topicsB[k];
+                const inBoth = ta && tb;
+                const bg = inBoth ? '#f0fdf4' : ta ? '#eff6ff' : '#fff7ed';
+                const tag = inBoth ? '<span style="color:#059669;font-size:9px">◉ BOTH</span>' : ta ? '<span style="color:#0284c7;font-size:9px">◉ A only</span>' : '<span style="color:#ea580c;font-size:9px">◉ B only</span>';
+                return `<tr style="background:${bg}">
+                    <td style="padding:5px 8px;font-size:11px">${ta?.name||tb?.name||k}</td>
+                    <td style="padding:5px 8px;text-align:center;font-size:11px">${ta ? ta.core+'C/'+ta.ext+'E ('+ta.marks+'m)' : '—'}</td>
+                    <td style="padding:5px 8px;text-align:center;font-size:11px">${tb ? tb.core+'C/'+tb.ext+'E ('+tb.marks+'m)' : '—'}</td>
+                    <td style="padding:5px 8px;text-align:center">${tag}</td>
+                </tr>`;
+            }).join('');
+
+            const w = window.open('','_blank');
+            w.document.title = 'Paper Comparison';
+            w.document.write(`<!DOCTYPE html><html><head>
+                <meta charset="utf-8"><title>Paper Comparison</title>
+                <style>body{font-family:system-ui;padding:20px;background:#f8fafc}table{width:100%;border-collapse:collapse}th{background:#1e293b;color:white;padding:8px;font-size:11px}tr:hover{filter:brightness(0.97)}@media print{@page{margin:10mm}}</style>
+            </head><body>
+                <h1 style="font-size:18px;font-weight:800;margin-bottom:4px">⚖️ Paper Comparison</h1>
+                <div style="font-size:12px;color:#64748b;margin-bottom:16px"><b>${a.subject}</b> vs <b>${b.subject}</b> · ${shared.length} shared topics · ${onlyA.length} unique to A · ${onlyB.length} unique to B</div>
+                <div style="display:flex;gap:12px;margin-bottom:16px;font-size:12px">
+                    <div style="background:#f0fdf4;padding:8px 14px;border-radius:6px">◉ Topics in BOTH papers: <b>${shared.length}</b></div>
+                    <div style="background:#eff6ff;padding:8px 14px;border-radius:6px">◉ Only in ${a.subject}: <b>${onlyA.length}</b></div>
+                    <div style="background:#fff7ed;padding:8px 14px;border-radius:6px">◉ Only in ${b.subject}: <b>${onlyB.length}</b></div>
+                </div>
+                <table><thead><tr>
+                    <th style="text-align:left">Topic</th>
+                    <th>${a.subject}</th>
+                    <th>${b.subject}</th>
+                    <th>Status</th>
+                </tr></thead><tbody>${rows}</tbody></table>
+            </body></html>`);
+            w.document.close();
+        }
+
+        function renderHistory() {
+            const list = document.getElementById('history-list');
+            if (!list) return;
+            if (analysisHistory.length === 0) { list.innerHTML = '<div class="text-center text-slate-400 text-sm py-8">No analysis history yet</div>'; return; }
+            list.innerHTML = analysisHistory.map(item => `
+                <div class="history-item p-3 border rounded-lg">
+                    <div class="font-bold text-xs cursor-pointer hover:text-indigo-600" onclick="loadHistoryItem(${item.id})">${item.subject}</div>
+                    <div class="text-[10px] text-slate-500">${item.date}</div>
+                    <div class="flex justify-between mt-1 text-[10px]">
+                        <span class="text-blue-600">🔵 ${item.coreCount || 0}</span>
+                        <span class="text-orange-600">🟠 ${item.extendedCount || 0}</span>
+                        <span class="text-red-600">🟥 ${item.removedCount || 0}</span>
+                    </div>
+                    <div class="flex gap-1 mt-2">
+                        <button onclick="loadHistoryItem(${item.id})" class="flex-1 text-[10px] bg-slate-100 rounded py-1 hover:bg-slate-200">📂 Load</button>
+                        <button onclick="selectForCompare(${item.id})" class="flex-1 text-[10px] bg-indigo-50 text-indigo-600 rounded py-1 hover:bg-indigo-100" data-compare-id="${item.id}">⚖️ Compare</button>
+                        <button onclick="if(confirm('Delete?')){analysisHistory=analysisHistory.filter(h=>h.id!==${item.id});localStorage.setItem('edexcel_history',JSON.stringify(analysisHistory));renderHistory();}" class="text-[10px] text-rose-400 hover:text-rose-600 px-2">✕</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function saveToHistory(subject, results) {
+            // Strip heavy content fields before saving — keeps history small to avoid localStorage quota errors
+            const lightResults = results.map(q => ({
+                qID: q.qID, topic: q.topic, subTopic: q.subTopic, subtopicId: q.subtopicId,
+                currType: q.currType, syllabusStatus: q.syllabusStatus, marks: q.marks,
+                difficulty: q.difficulty, flagged: q.flagged
+            }));
+            const entry = { id: Date.now(), subject, date: new Date().toLocaleString(), questionCount: results.length, coreCount: results.filter(q=>q.currType==='Unit 1').length, extendedCount: results.filter(q=>q.currType==='Unit 2').length, removedCount: results.filter(q=>q.syllabusStatus==='removed').length, totalMarks: results.reduce((s,q)=>s+(q.marks||0),0), results: lightResults };
+            analysisHistory.unshift(entry);
+            if (analysisHistory.length > 20) analysisHistory.pop();
+            try {
+                localStorage.setItem('edexcel_history', JSON.stringify(analysisHistory));
+            } catch(e) {
+                // Quota exceeded — trim to last 5 entries and retry
+                analysisHistory = analysisHistory.slice(0, 5);
+                try { localStorage.setItem('edexcel_history', JSON.stringify(analysisHistory)); } catch(e2) { /* silently ignore */ }
+            }
+            renderHistory();
+        }
+
+        function loadHistoryItem(id) {
+            const item = analysisHistory.find(i => i.id === id);
+            if (!item) return;
+            showModal('History Item', `Analysis from ${item.date}\nSubject: ${item.subject}\nQuestions: ${item.questionCount}\n🔵 Unit 1: ${item.coreCount} | 🟠 Unit 2: ${item.extendedCount} | 🟥 Removed: ${item.removedCount}`);
+        }
+
+        function clearHistory() {
+            if (confirm('Clear all history?')) { analysisHistory = []; localStorage.removeItem('edexcel_history'); renderHistory(); }
+        }
+        function exportHistory() {
+            const blob = new Blob([JSON.stringify(analysisHistory, null, 2)], { type: 'application/json' });
+            const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: `igcse_history_${Date.now()}.json` });
+            document.body.appendChild(a); a.click(); setTimeout(()=>{ document.body.removeChild(a); URL.revokeObjectURL(a.href); }, 100);
+        }
+
+
+        // ── Editable HTML Export ──────────────────────────────────────────────
         function exportEditableHTML() {
             if (!currentResults.length) { showModal('No Results', 'Run an analysis first.'); return; }
 
@@ -1752,7 +1943,7 @@ RULE: classify [UNIT1] or [UNIT2] based on which topic the question tests. Both 
             const paper    = currentPaperCode || subject || 'Paper';
             const unitFilter = getReportUnitFilter ? getReportUnitFilter() : 'all';
             const baseData = (typeof applyUnitFilter === 'function') ? applyUnitFilter(currentResults, unitFilter) : [...currentResults];
-            const safe     = buildReportFilename(paper, 'Editable', 'exam', unitFilter);
+            const safe     = (paper||'Paper').replace(/[\/\s]/g,'_') + '_Editable_exam_' + (unitFilterSuffix(unitFilter)||'all');
 
             // Serialise question data — strip raw HTML blobs to clean text for portability
             const qData = baseData.map(q => ({
@@ -1816,7 +2007,6 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#f1f5f9;color:#1e293b;fo
 .badge{display:inline-block;font-size:9px;font-weight:800;padding:2px 8px;border-radius:4px;text-transform:uppercase}
 .badge-core{background:#dbeafe;color:#1d4ed8}
 .badge-ext{background:#ffedd5;color:#c2410c}
-.badge-ce{background:#ede9fe;color:#6d28d9}
 .badge-rem{background:#fee2e2;color:#991b1b}
 .badge-diff-easy{background:#d1fae5;color:#065f46}
 .badge-diff-med{background:#fef3c7;color:#92400e}
@@ -1838,8 +2028,8 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#f1f5f9;color:#1e293b;fo
     <option value="Unit 1" style="background:#1e293b">🔵 Unit 1</option>
     <option value="Unit 2" style="background:#1e293b">🟠 Unit 2</option>
   </select>
-  <button class="btn btn-indigo" onclick="runStudentReport('exam')">🎓 Report Exam</button>
-  <button class="btn btn-violet" onclick="runStudentReport('topic')">🎓 Report Topic</button>
+  <button class="btn btn-indigo" onclick="runStudentReport('exam')">🎓 Report (Exam Order)</button>
+  <button class="btn btn-violet" onclick="runStudentReport('topic')">🎓 Report (Topic Order)</button>
   <button class="btn btn-slate" onclick="runPrintReport('exam')">🖨️ Print Exam</button>
   <button class="btn btn-slate" onclick="runPrintReport('topic')">🖨️ Print Topic</button>
   <button class="btn btn-pdf" onclick="runPDF('exam')">📄 PDF Exam</button>
@@ -1864,7 +2054,6 @@ const FIELD_META = {
   commonMistakes: { label:'Common Mistakes',      color:'#dc2626', emoji:'⚠️' },
   examTips:       { label:'Exam Tips',            color:'#059669', emoji:'💡' },
   feedback:       { label:'Feedback / Comments',  color:'#d97706', emoji:'💬' },
-  tutorNote:      { label:'Tutor Note',           color:'#6d28d9', emoji:'🎓' },
 };
 const EDITABLE_FIELDS = Object.keys(FIELD_META);
 
@@ -1877,10 +2066,10 @@ function renderCards() {
   let lastTopic = null;
 
   qData.forEach((q, qi) => {
-    const isCore = q.currType === 'Core' || q.currType === 'Core/Extended';
-    const isExt  = q.currType === 'Extended' || q.currType === 'Core/Extended';
-    const accent = q.currType === 'Core/Extended' ? '#7c3aed' : isCore ? '#0284c7' : '#ea580c';
-    const accentBg = q.currType === 'Core/Extended' ? '#f5f3ff' : isCore ? '#eff6ff' : '#fff7ed';
+    const isCore = q.currType === 'Unit 1' || q.currType === 'Core';
+    const isExt  = q.currType === 'Unit 2' || q.currType === 'Extended';
+    const accent = isCore ? '#0284c7' : '#ea580c';
+    const accentBg = isCore ? '#eff6ff' : '#fff7ed';
     const typeBadge = q.currType === 'Core/Extended'
       ? '<span class="badge badge-ce">Core/Extended</span>'
       : isCore ? '<span class="badge badge-core">Core</span>'
@@ -2024,7 +2213,13 @@ function buildFilename(sortMode, reportType) {
 
 function rndr(s) {
   if (!s) return '';
-  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\\*\\*(.*?)\\*\\*/g,'<b>$1</b>').replace(/\\n/g,'<br>');
+  if (new RegExp('<(span|div|table|p|em|strong|br)\\b','i').test(s)) {
+    return s.replace(new RegExp('<script\\b[^>]*>[^]*?<\\/script>','gi'),'')
+            .replace(new RegExp('on\\w+="[^"]*"','gi'),'');
+  }
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+          .replace(new RegExp('\\*\\*(.*?)\\*\\*','g'),'<b>$1</b>')
+          .split('\n').join('<br>');
 }
 
 function section(icon, label, body, color, bg) {
@@ -2039,15 +2234,15 @@ function section(icon, label, body, color, bg) {
 function runStudentReport(sortMode) {
   const data = getSorted(sortMode);
   const totalMarks = data.reduce((s,q)=>s+(parseInt(q.marks)||0),0);
-  const coreN  = data.filter(q=>q.currType==='Core'||q.currType==='Core/Extended').length;
-  const extN   = data.filter(q=>q.currType==='Extended'||q.currType==='Core/Extended').length;
+  const coreN  = data.filter(q=>q.currType==='Unit 1'||q.currType==='Core').length;
+  const extN   = data.filter(q=>q.currType==='Unit 2'||q.currType==='Extended').length;
 
   let rows = '';
   data.forEach(q => {
-    const isCore = q.currType==='Core'||q.currType==='Core/Extended';
-    const accent = q.currType==='Core/Extended'?'#7c3aed':isCore?'#0284c7':'#ea580c';
-    const accentLight = q.currType==='Core/Extended'?'#f5f3ff':isCore?'#eff6ff':'#fff7ed';
-    const typeLabel = q.currType==='Core/Extended'?'CORE/EXTENDED':isCore?'CORE':'EXTENDED';
+    const isCore = q.currType==='Unit 1'||q.currType==='Core';
+    const accent = isCore?'#0284c7':'#ea580c';
+    const accentLight = isCore?'#eff6ff':'#fff7ed';
+    const typeLabel = isCore?'UNIT 1':'UNIT 2';
     const tNum2 = q.subtopicId ? parseInt(q.subtopicId.split('.')[0]) : 0;
     const tName2 = (tNum2 && TOPIC_NAMES[tNum2]) ? TOPIC_NAMES[tNum2] : (q.topic||'');
 
@@ -2083,8 +2278,7 @@ function runStudentReport(sortMode) {
         \${section('⚠️','Common Mistakes', q.commonMistakes, '#dc2626', '#fff1f2')}
         \${section('💡','Exam Tips', q.examTips, '#059669', '#f0fdf4')}
         \${section('💬','Feedback', q.feedback, '#d97706', '#fffbeb')}
-        \${section('🎓','Tutor Note', q.tutorNote, '#6d28d9', '#f5f3ff')}
-      </div>
+              </div>
     </div>\`;
   });
 
@@ -2099,7 +2293,6 @@ function runStudentReport(sortMode) {
 <div class="no-print" style="background:#1e293b;color:white;padding:10px 20px;border-radius:8px;margin-bottom:20px;display:flex;gap:8px;align-items:center">
   <strong style="font-size:13px">\${PAPER} — Student Report (\${sortMode==='topic'?'Topic Order':'Exam Order'})</strong>
   <div style="margin-left:auto;display:flex;gap:6px">
-    <button onclick="(function(){const b=new Blob([document.documentElement.outerHTML],{type:'text/html'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='\${_fname}.html';a.click();URL.revokeObjectURL(a.href);})()" style="background:#16a34a;color:white;border:none;padding:6px 14px;border-radius:6px;cursor:pointer;font-weight:700;font-size:11px">💾 Save HTML</button>
     <button onclick="window.print()" style="background:#4f46e5;color:white;border:none;padding:6px 16px;border-radius:6px;cursor:pointer;font-weight:700;font-size:11px">🖨️ Print / Save PDF</button>
   </div>
 </div>
@@ -2120,9 +2313,9 @@ function runPrintReport(sortMode) {
   const data = getSorted(sortMode);
   let rows = '';
   data.forEach(q => {
-    const isCore = q.currType==='Core'||q.currType==='Core/Extended';
-    const accent = q.currType==='Core/Extended'?'#7c3aed':isCore?'#0284c7':'#ea580c';
-    const typeLabel = q.currType==='Core/Extended'?'CORE/EXTENDED':isCore?'CORE':'EXTENDED';
+    const isCore = q.currType==='Unit 1'||q.currType==='Core';
+    const accent = isCore?'#0284c7':'#ea580c';
+    const typeLabel = isCore?'UNIT 1':'UNIT 2';
     const tNum2 = q.subtopicId ? parseInt(q.subtopicId.split('.')[0]) : 0;
     const tName2 = (tNum2 && TOPIC_NAMES[tNum2]) ? TOPIC_NAMES[tNum2] : (q.topic||'');
 
@@ -2142,8 +2335,7 @@ function runPrintReport(sortMode) {
         \${section('⚠️','Common Mistakes', q.commonMistakes, '#dc2626', '#fff1f2')}
         \${section('💡','Exam Tips', q.examTips, '#059669', '#f0fdf4')}
         \${section('💬','Feedback', q.feedback, '#d97706', '#fffbeb')}
-        \${section('🎓','Tutor Note', q.tutorNote, '#6d28d9', '#f5f3ff')}
-      </div>
+              </div>
     </div>\`;
   });
 
@@ -2157,7 +2349,6 @@ div[style*="break-inside:avoid"]{break-inside:avoid!important;page-break-inside:
 <div class="no-print" style="background:#1e293b;color:white;padding:10px 20px;border-radius:8px;margin-bottom:20px;display:flex;gap:8px;align-items:center">
   <strong>\${PAPER} · Print Report · \${sortMode==='topic'?'Topic Order':'Exam Order'}</strong>
   <div style="margin-left:auto;display:flex;gap:6px">
-    <button onclick="(function(){const b=new Blob([document.documentElement.outerHTML],{type:'text/html'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='\${_pfname}.html';a.click();URL.revokeObjectURL(a.href);})()" style="background:#16a34a;color:white;border:none;padding:6px 14px;border-radius:6px;cursor:pointer;font-weight:700;font-size:11px">💾 Save HTML</button>
     <button onclick="window.print()" style="background:#4f46e5;color:white;border:none;padding:6px 16px;border-radius:6px;cursor:pointer;font-weight:700;font-size:11px">🖨️ Print</button>
   </div>
 </div>
@@ -2199,12 +2390,12 @@ function runPDF(sortMode) {
   addText(\`\${data.length} questions  ·  \${sortMode==='topic'?'Topic Order':'Exam Order'}\`, 10, true);
   yPos += 6;
 
-  const typeColors = { Core:[2,132,199], Extended:[234,88,12], 'Core/Extended':[124,58,237] };
+  const typeColors = { 'Unit 1':[2,132,199], Core:[2,132,199], 'Unit 2':[234,88,12], Extended:[234,88,12] };
   data.forEach((q, i) => {
     const tc = typeColors[q.currType] || [100,116,139];
     const tNum = q.subtopicId ? parseInt(q.subtopicId.split('.')[0]) : 0;
     const tName = (tNum && TOPIC_NAMES[tNum]) ? TOPIC_NAMES[tNum] : (q.topic || '');
-    const typeLabel = q.currType==='Core/Extended'?'CORE/EXTENDED':q.currType==='Core'?'CORE':'EXTENDED';
+    const typeLabel = q.currType==='Unit 1'||q.currType==='Core'?'UNIT 1':'UNIT 2';
 
     if (yPos > 250) { pdf.addPage(); yPos = 20; }
     else if (i > 0) { yPos += 5; }
@@ -2259,7 +2450,7 @@ renderCards();
             if (!currentResults.length) return;
             let csv = 'Topic,Question ID,Unit,Marks,Difficulty,Status,Question Text\n';
             currentResults.forEach(q => { csv += `"${q.topic}","${q.qID}","${q.currType}",${q.marks},"${q.difficulty||'Medium'}","${q.syllabusStatus||'current'}","${q.text.replace(/"/g,'""')}"\n`; });
-            const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(new Blob([csv],{type:'text/csv'})), download: `igcse_study_guide_${Date.now()}.csv` });
+            const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(new Blob([csv],{type:'text/csv'})), download: `${(currentPaperCode||'Paper').replace(/[\/\s]/g,'_')}_Questions.csv` });
             document.body.appendChild(a); a.click(); setTimeout(()=>{ document.body.removeChild(a); URL.revokeObjectURL(a.href); }, 100);
         }
 
@@ -2303,7 +2494,7 @@ renderCards();
                     }
                 });
                 root.querySelectorAll('button').forEach(btn=>btn.remove());
-                // Walk nodes: keep text, <img>, <b>/<strong>, img-row flex, convert <br> to \n
+                // Walk nodes: keep text, <img>, <b>/<strong>, convert <br> to \n
                 function walk(node) {
                     let out = '';
                     node.childNodes.forEach(function(child) {
@@ -2315,9 +2506,37 @@ renderCards();
                             out += '\n';
                         } else if (child.nodeName === 'B' || child.nodeName === 'STRONG') {
                             out += '<b>' + walk(child) + '</b>';
-                        } else if (child.className && child.className.includes('img-row')) {
-                            // Preserve flex row so images stay side-by-side in print
-                            out += '<div style="display:flex;flex-wrap:wrap;gap:8px;margin:6px 0;align-items:flex-start">' + walk(child) + '</div>';
+                        } else if (child.nodeName === 'TABLE') {
+                            // Convert HTML table to plain-text grid for print/PDF
+                            const rows = child.querySelectorAll('tr');
+                            const colWidths = [];
+                            const grid = [];
+                            rows.forEach(function(row) {
+                                const cells = Array.from(row.querySelectorAll('th,td')).map(function(cell) {
+                                    return cell.textContent.trim();
+                                });
+                                cells.forEach(function(cell, i) {
+                                    colWidths[i] = Math.max(colWidths[i] || 0, cell.length);
+                                });
+                                grid.push(cells);
+                            });
+                            if (grid.length) {
+                                const sep = '+' + colWidths.map(function(w) { return '-'.repeat(w+2); }).join('+') + '+';
+                                out += '\n' + sep + '\n';
+                                grid.forEach(function(row, ri) {
+                                    out += '| ' + row.map(function(cell, i) {
+                                        return cell + ' '.repeat(Math.max(0, colWidths[i]-cell.length));
+                                    }).join(' | ') + ' |\n';
+                                    if (ri === 0) out += sep + '\n';
+                                });
+                                out += sep + '\n';
+                            }
+                        } else if (child.classList && child.classList.contains('q-ans-line')) {
+                            out += '\n______________________________';
+                        } else if (child.classList && child.classList.contains('q-fig')) {
+                            out += '\n[' + child.textContent.trim() + ']\n';
+                        } else if (child.nodeName === 'EM' || child.nodeName === 'I') {
+                            out += '<i>' + walk(child) + '</i>';
                         } else {
                             out += walk(child);
                         }
@@ -2355,9 +2574,6 @@ renderCards();
         }
         // Clean text for PDF — strip HTML, fix LaTeX formulas, fix separators, preserve newlines
         function cleanForPDF(text) {
-            if (!s) return '';
-            s = s.replace(/\/\//g, ' ');
-
             if (!text) return '';
             return text
                 .replace(/<br\s*\/?>/gi, '\n')
@@ -2386,25 +2602,9 @@ renderCards();
             const paper = currentPaperCode || 'Paper';
             const safe  = buildReportFilename(paper, 'Student_Report', sortMode, unitFilter);
             const flaggedOnly = currentResults.filter(q => q.flagged);
-            // Respect active filters — if a filter is set, use filtered subset; flagged overrides
-            const filtered = applyUnitFilter(getFilteredResults(), unitFilter);
-            let data = flaggedOnly.length ? applyUnitFilter([...flaggedOnly], unitFilter) : [...filtered];
-            const isFiltered = filtered.length !== currentResults.length && !flaggedOnly.length;
-            const filterLabel = isFiltered ? (() => {
-                const tf = document.getElementById('filter-type')?.value || 'all';
-                const sf = document.getElementById('filter-status')?.value || 'all';
-                const df = document.getElementById('filter-difficulty')?.value || 'all';
-                const parts = [];
-                if (tf === 'Unit 1') parts.push('Unit 1 only');
-                else if (tf === 'Unit 2') parts.push('Unit 2 only');
-                else if (tf === 'bio-only') parts.push('[B] Biology-only');
-                if (sf !== 'all') parts.push(sf);
-                if (df !== 'all') parts.push(df);
-                return parts.length ? ' — Filtered: ' + parts.join(', ') : '';
-            })() : '';
+            let data = flaggedOnly.length ? [...flaggedOnly] : applyUnitFilter([...currentResults], unitFilter);
             const flagNote = flaggedOnly.length
-                ? `<p style="font-size:11px;color:#7c3aed;margin:6px 0 0">⚑ Showing ${flaggedOnly.length} flagged question(s) only</p>`
-                : isFiltered ? `<p style="font-size:11px;color:#0284c7;margin:6px 0 0">🔍 Filtered: showing ${data.length} of ${currentResults.length} questions${filterLabel}</p>` : '';
+                ? `<p style="font-size:11px;color:#64748b;margin:6px 0 0">⚑ Showing ${flaggedOnly.length} flagged question(s) only</p>` : '';
 
             // ── Sort ──────────────────────────────────────────────────────────
             if (sortMode === 'topic') {
@@ -2420,8 +2620,8 @@ renderCards();
 
             // ── Stats for cover page ──────────────────────────────────────────
             const totalMarks = data.reduce((s,q)=>s+(parseInt(q.marks)||0),0);
-            const coreN  = data.filter(q=>q.currType==='Unit 1').length;
-            const extN   = data.filter(q=>q.currType==='Unit 2').length;
+            const coreN  = data.filter(q=>q.currType==='Unit 1'||q.currType==='Core').length;
+            const extN   = data.filter(q=>q.currType==='Unit 2'||q.currType==='Extended').length;
             const easyN  = data.filter(q=>q.difficulty==='Easy').length;
             const medN   = data.filter(q=>q.difficulty==='Medium').length;
             const hardN  = data.filter(q=>q.difficulty==='Hard').length;
@@ -2470,11 +2670,11 @@ renderCards();
                         </div>
                         <div style="background:rgba(2,132,199,0.3);border-radius:10px;padding:14px 8px;text-align:center">
                             <div style="font-size:26px;font-weight:900">${coreN}</div>
-                            <div style="font-size:10px;opacity:0.7;margin-top:2px;text-transform:uppercase;letter-spacing:0.05em">Unit 1</div>
+                            <div style="font-size:10px;opacity:0.7;margin-top:2px;text-transform:uppercase;letter-spacing:0.05em">Core</div>
                         </div>
                         <div style="background:rgba(234,88,12,0.3);border-radius:10px;padding:14px 8px;text-align:center">
                             <div style="font-size:26px;font-weight:900">${extN}</div>
-                            <div style="font-size:10px;opacity:0.7;margin-top:2px;text-transform:uppercase;letter-spacing:0.05em">Unit 2</div>
+                            <div style="font-size:10px;opacity:0.7;margin-top:2px;text-transform:uppercase;letter-spacing:0.05em">Extended</div>
                         </div>
                     </div>
 
@@ -2514,11 +2714,11 @@ renderCards();
             let lastTopicId = null;
 
             data.forEach(q => {
-                const isCore  = q.currType==='Unit 1';
-                const isExt   = q.currType==='Unit 2';
+                const isCore  = q.currType==='Unit 1'||q.currType==='Core';
+                const isExt   = q.currType==='Unit 2'||q.currType==='Extended';
                 const accent  = isCore ? '#0284c7' : '#ea580c';
-                const accentLight = isCore ? '#eff6ff' : '#fff7ed';
-                const typeLabel = isCore ? 'UNIT 1' : 'UNIT 2';
+                const accentLight = q.currType==='Core/Extended' ? '#f5f3ff' : isCore ? '#eff6ff' : '#fff7ed';
+                const typeLabel = isCore?'UNIT 1':'UNIT 2';
                 const diffBg  = q.difficulty==='Easy'?'#d1fae5':q.difficulty==='Hard'?'#fee2e2':'#fef3c7';
                 const diffCol = q.difficulty==='Easy'?'#065f46':q.difficulty==='Hard'?'#991b1b':'#92400e';
 
@@ -2542,9 +2742,8 @@ renderCards();
                     }
                 }
 
-                // Mark scheme — run through cleanFieldForReport so any pasted images have controls stripped
-                const cleanMs = cleanFieldForReport(q.ms || '');
-                const msHtml = cleanMs.split('\n').filter(l=>l.trim()).map(l => {
+                // Mark scheme
+                const msHtml = (q.ms||'').split('\n').filter(l=>l.trim()).map(l => {
                     const t = l.trim();
                     const isR = /^(reject|do not accept|not accept|incorrect)/i.test(t);
                     const isA = /^(allow|accept|credit|condone)/i.test(t);
@@ -2585,7 +2784,7 @@ renderCards();
                             ${cleanFieldForReport(q.text)}
                         </div>
                         <!-- Mark Scheme -->
-                        <div style="margin-bottom:${q.model||q.explanation||q.commonMistakes||q.teacherNotes?'12px':'0'}">
+                        <div style="margin-bottom:${q.model||q.explanation||q.teacherNotes?'12px':'0'}">
                             <div style="font-size:8.5px;font-weight:800;color:#0284c7;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:5px">✅ Mark Scheme</div>
                             ${msHtml || '<div style="font-size:10px;color:#94a3b8;font-style:italic">No mark scheme</div>'}
                         </div>
@@ -2597,74 +2796,22 @@ renderCards();
                         <!-- Concept Explanation -->
                         ${q.explanation ? `<div style="border-top:1px solid #e2e8f0;padding-top:10px;margin-bottom:10px;border-left:3px solid #0891b2;padding-left:10px">
                             <div style="font-size:8.5px;font-weight:800;color:#0891b2;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px">💡 Concept Explanation</div>
-                            <div style="font-size:10.5px;color:#1e293b;line-height:1.7">${cleanFieldForReport(q.explanation)}</div>
+                            <div style="font-size:10.5px;color:#1e293b;line-height:1.7">${q.explanation}</div>
                         </div>` : ''}
                         <!-- Common Mistakes -->
-                        ${q.commonMistakes ? `<div style="border-top:1px solid #e2e8f0;padding-top:10px;margin-bottom:10px;background:#fff7ed;border-left:3px solid #f97316;padding-left:10px;border-radius:0 5px 5px 0">
-                            <div style="font-size:8.5px;font-weight:800;color:#ea580c;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px">⚠️ Common Mistakes</div>
-                            <div style="font-size:10.5px;color:#7c2d12;line-height:1.7">${cleanFieldForReport(q.commonMistakes)}</div>
-                        </div>` : ''}
+
+                        <!-- Step-by-Step -->
+
                         <!-- Tutor / Teacher Notes -->
                         ${q.teacherNotes ? `<div style="border-top:1px solid #e2e8f0;padding-top:10px;background:#f0f9ff;border-left:3px solid #0284c7;padding-left:10px;border-radius:0 5px 5px 0;margin-bottom:8px">
                             <div style="font-size:8.5px;font-weight:800;color:#0369a1;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px">📝 Teacher Notes</div>
-                            <div style="font-size:10.5px;color:#0c4a6e;line-height:1.7">${cleanFieldForReport(q.teacherNotes)}</div>
+                            <div style="font-size:10.5px;color:#0c4a6e;line-height:1.7">${q.teacherNotes}</div>
                         </div>` : ''}
                     </div>
                 </div>`;
             });
 
             const sortLabel = sortMode === 'topic' ? 'Topic Order' : 'Exam Order';
-
-            // ── Summary table (after cover page) ─────────────────────────────
-            const summaryStats = {};
-            const summaryKeyOrder = [];
-            data.forEach(q => {
-                const key = q.subtopicId ? q.subtopicId : (q.topic || 'Other');
-                if (!summaryStats[key]) {
-                    const tNum = q.subtopicId ? parseInt(q.subtopicId.split('.')[0]) : 0;
-                    const canonName = (tNum && TOPIC_NAMES[tNum]) ? TOPIC_NAMES[tNum] : (q.topic || 'Other');
-                    summaryStats[key] = { subtopicId: q.subtopicId||'', canonName, subName: q.subTopic||q.topic||'', questions:[], marks:0, u1N:0, u2N:0 };
-                    summaryKeyOrder.push(key);
-                }
-                summaryStats[key].questions.push(q.qID);
-                summaryStats[key].marks += parseInt(q.marks)||0;
-                if (q.currType==='Unit 1') summaryStats[key].u1N++; else summaryStats[key].u2N++;
-            });
-            const summaryTotal = data.reduce((s,q)=>s+(parseInt(q.marks)||0),0);
-            const summaryRows2 = summaryKeyOrder.map(key => {
-                const st = summaryStats[key];
-                const tNum = st.subtopicId ? parseInt(st.subtopicId.split('.')[0]) : 0;
-                const pct  = summaryTotal > 0 ? ((st.marks/summaryTotal)*100).toFixed(1) : '0';
-                const topicCell = st.subtopicId
-                    ? `<div style="font-weight:700;color:#3730a3;font-size:10px">Topic ${tNum}. ${st.canonName}</div><div style="font-size:9px;color:#64748b;margin-top:2px">Sub-topic: ${st.subtopicId} ${st.subName}</div>`
-                    : `<div style="font-weight:700;color:#1e293b;font-size:10px">${st.canonName}</div>`;
-                const qPills = st.questions.map(qid => {
-                    const q2 = data.find(x=>x.qID===qid);
-                    const isU1 = q2 ? q2.currType==='Unit 1' : true;
-                    const bg2 = isU1?'#dbeafe':'#ffedd5'; const fg2 = isU1?'#1d4ed8':'#c2410c';
-                    return `<span style="background:${bg2};color:${fg2};font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;margin:1px">${currentPaperCode?currentPaperCode+'/':''}Q${qid}</span>`;
-                }).join('');
-                const bar2 = `<div style="height:5px;background:#e2e8f0;border-radius:3px;margin-top:3px"><div style="height:5px;width:${pct}%;background:#4f46e5;border-radius:3px"></div></div>`;
-                const typePill = (st.u1N>0&&st.u2N>0)
-                    ? '<span style="background:#dbeafe;color:#1d4ed8;font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;margin-right:2px">U1</span><span style="background:#ffedd5;color:#c2410c;font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px">U2</span>'
-                    : (st.u1N>0 ? '<span style="background:#dbeafe;color:#1d4ed8;font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px">Unit 1</span>'
-                                : '<span style="background:#ffedd5;color:#c2410c;font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px">Unit 2</span>');
-                return `<tr style="border-bottom:1px solid #f1f5f9"><td style="padding:7px 8px">${topicCell}</td><td style="padding:7px 8px;font-size:10px">${qPills}</td><td style="padding:7px 8px;text-align:center;font-weight:700;font-size:10px">${st.marks}</td><td style="padding:7px 8px;font-size:10px">${pct}%${bar2}</td><td style="padding:7px 8px;text-align:center">${typePill}</td></tr>`;
-            }).join('');
-            const summaryTableHtml = `
-            <div style="max-width:780px;margin:0 auto;padding:32px 16px 0;page-break-after:avoid">
-                <h2 style="font-size:15px;font-weight:800;color:#1e293b;margin-bottom:12px;padding-bottom:8px;border-bottom:2px solid #e2e8f0">📊 Summary — ${sortLabel}</h2>
-                <table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:32px">
-                    <thead><tr style="background:#f8fafc">
-                        <th style="padding:8px;text-align:left;font-size:10px;color:#475569;font-weight:700;border-bottom:2px solid #e2e8f0;min-width:160px">Topic / Subtopic</th>
-                        <th style="padding:8px;text-align:left;font-size:10px;color:#475569;font-weight:700;border-bottom:2px solid #e2e8f0">Questions</th>
-                        <th style="padding:8px;text-align:center;font-size:10px;color:#475569;font-weight:700;border-bottom:2px solid #e2e8f0">Marks</th>
-                        <th style="padding:8px;text-align:left;font-size:10px;color:#475569;font-weight:700;border-bottom:2px solid #e2e8f0">% of Paper</th>
-                        <th style="padding:8px;text-align:center;font-size:10px;color:#475569;font-weight:700;border-bottom:2px solid #e2e8f0">Unit</th>
-                    </tr></thead>
-                    <tbody>${summaryRows2}</tbody>
-                </table>
-            </div>`;
             const w = window.open('','_blank');
             const sortSuffix = sortMode === 'topic' ? 'Topic_Order' : 'Exam_Order';
             w.document.title = `${safe} — Student Report (${sortMode === 'topic' ? 'Topic Order' : 'Exam Order'})`;
@@ -2682,8 +2829,6 @@ renderCards();
                         .qcard *{break-inside:avoid!important;page-break-inside:avoid!important}
                         .topic-divider{break-after:avoid!important;page-break-after:avoid!important}
                         img{max-width:100%!important;page-break-inside:avoid!important}
-                        [data-img-wrapper] > div{display:none!important}
-                        [data-img-wrapper] > button{display:none!important}
                     }
                     .qcard{break-inside:avoid;page-break-inside:avoid}
                     .qcard *{break-inside:avoid;page-break-inside:avoid}
@@ -2694,12 +2839,10 @@ renderCards();
                 </style>
             </head><body>
                 ${coverPage}
-                ${summaryTableHtml}
                 <div style="max-width:780px;margin:0 auto;padding:24px 16px">
                     <div class="no-print" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;padding:10px 14px;background:white;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,0.1)">
                         <span style="font-size:12px;font-weight:700;color:#475569">${paper} · ${data.length} questions · ${sortLabel}</span>
                         <div style="display:flex;gap:6px">
-                          <button onclick="(function(){const b=new Blob([document.documentElement.outerHTML],{type:'text/html'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='${safe}.html';a.click();URL.revokeObjectURL(a.href);})()" style="background:#16a34a;color:white;border:none;padding:7px 14px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">💾 Save HTML</button>
                           <button onclick="window.print()" style="background:#1e293b;color:white;border:none;padding:7px 16px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">🖨️ Print / Save PDF</button>
                         </div>
                     </div>
@@ -2711,48 +2854,37 @@ renderCards();
 
         function printReport(sortMode) {
             if (!currentResults.length) { showModal('No Results', 'Run an analysis first before printing.'); return; }
-            if (!sortMode) sortMode = 'exam';
-            const unitFilter = getReportUnitFilter();
             const pw = window.open('', '_blank');
             const paper      = document.getElementById('subject')?.value || 'Unknown';
-            // Respect active filters
-            const _filtered = applyUnitFilter(getFilteredResults(), unitFilter);
-            const isFiltered = _filtered.length !== currentResults.length;
-            const filterNote = isFiltered ? ` · 🔍 Filtered: ${_filtered.length}/${currentResults.length} questions` : '';
-            const sourceResults = _filtered;
-            const coreCount  = sourceResults.filter(q=>q.currType==='Unit 1').length;
-            const extCount   = sourceResults.filter(q=>q.currType==='Unit 2').length;
-            const remCount   = sourceResults.filter(q=>q.syllabusStatus==='removed').length;
-            const totalMarks = sourceResults.reduce((s,q)=>s+(parseInt(q.marks)||0),0);
-            const sortLabel  = sortMode === 'topic' ? 'Topic Order' : 'Exam Order';
-            const reportFileName = buildReportFilename(currentPaperCode || paper, 'PrintReport', sortMode, unitFilter);
-
-            // Sort a copy — exam order preserves order, topic order sorts numerically
-            let orderedResults = [...sourceResults];
-            if (sortMode === 'topic') {
-                orderedResults.sort((a, b) => {
+            const unitFilter = getReportUnitFilter();
+            const baseResults = applyUnitFilter(currentResults, unitFilter);
+            const sourceData = sortMode === 'topic'
+                ? [...baseResults].sort((a, b) => {
                     const aid = a.subtopicId || '99.99', bid = b.subtopicId || '99.99';
                     const [am, as_] = aid.split('.').map(Number);
                     const [bm, bs_] = bid.split('.').map(Number);
                     if (am !== bm) return am - bm;
-                    if (as_ !== bs_) return as_ - bs_;
-                    return compareQIDs(a.qID, b.qID);
-                });
-            }
+                    return as_ - bs_;
+                  })
+                : [...baseResults];
+            const coreCount  = currentResults.filter(q=>q.currType==='Unit 1'||q.currType==='Core').length;
+            const extCount   = currentResults.filter(q=>q.currType==='Unit 2'||q.currType==='Extended').length;
+            const remCount   = currentResults.filter(q=>q.syllabusStatus==='removed').length;
+            const totalMarks = currentResults.reduce((s,q)=>s+(parseInt(q.marks)||0),0);
 
-            function esc(t){ return cleanFieldForReport(t||''); }
+            function esc(t){ return (t||'').replace(/\n/g,'<br>'); } // HTML preserved for images and formatting
 
-            // ── Topic summary — respects sort order ──────────────────────────────
+            // ── Topic summary analysis — exam sequence order ─────────────────
             const topicStats = {};
             const topicKeyOrder = [];
-            orderedResults.forEach(q => {
+            sourceData.forEach(q => {
                 const key = q.subtopicId ? (q.subtopicId + '|||' + (q.topic||'Other')) : (q.topic||'Other');
                 if (!topicStats[key]) { topicStats[key] = { id: q.subtopicId||'', name: q.topic||'Other', questions:[], coreN:0, extN:0, marks:0 }; topicKeyOrder.push(key); }
                 topicStats[key].questions.push(q.qID);
-                if (q.currType==='Unit 1') topicStats[key].coreN++; else topicStats[key].extN++;
+                if (q.currType==='Unit 1'||q.currType==='Core') topicStats[key].coreN++; else topicStats[key].extN++;
                 topicStats[key].marks += parseInt(q.marks)||0;
             });
-            const totalM = orderedResults.reduce((s,q)=>s+(parseInt(q.marks)||0),0);
+            const totalM = sourceData.reduce((s,q)=>s+(parseInt(q.marks)||0),0);
             const summaryRows = topicKeyOrder.map(k => {
                 const s = topicStats[k];
                 const pct = totalM>0 ? ((s.marks/totalM)*100).toFixed(0) : '0';
@@ -2763,20 +2895,16 @@ renderCards();
                        + '<div style="font-size:9px;color:#64748b;margin-top:2px">Sub-topic: ' + s.id + ' ' + s.name + '</div>')
                     : '<div style="font-weight:700;color:#1e293b;font-size:10px">' + s.name + '</div>';
                 const qPills = s.questions.map(qid => {
-                    const q2 = orderedResults.find(x => x.qID === qid);
-                    const isU1 = q2 ? q2.currType === 'Unit 1' : true;
-                    const bg = isU1 ? '#dbeafe' : '#ffedd5';
-                    const fg = isU1 ? '#1d4ed8' : '#c2410c';
+                    const q2 = currentResults.find(x => x.qID === qid);
+                    const isCore = q2 ? q2.currType === 'Core' : true;
+                    const bg = isCore ? '#dbeafe' : '#ffedd5';
+                    const fg = isCore ? '#1d4ed8' : '#c2410c';
                     return '<span style="background:' + bg + ';color:' + fg + ';font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;margin:1px">'
                            + (currentPaperCode ? currentPaperCode + '/' : '') + 'Q' + qid + '</span>';
                 }).join('');
                 const bar = '<div style="height:6px;background:#e2e8f0;border-radius:3px;margin-top:3px">'
                           + '<div style="height:6px;width:' + pct + '%;background:#4f46e5;border-radius:3px"></div></div>';
-                const typeCell = (s.coreN>0 && s.extN>0)
-                    ? '<span style="background:#dbeafe;color:#1d4ed8;font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;margin-right:2px">U1</span><span style="background:#ffedd5;color:#c2410c;font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px">U2</span>'
-                    : (s.coreN>0
-                        ? '<span style="background:#dbeafe;color:#1d4ed8;font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px">Unit 1</span>'
-                        : '<span style="background:#ffedd5;color:#c2410c;font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px">Unit 2</span>');
+                const typeCell = (s.coreN>0 && s.extN>0) ? '<span style="background:#dbeafe;color:#1d4ed8;font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;margin-right:2px">Core</span><span style="background:#ffedd5;color:#c2410c;font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px">Ext</span>' : (s.coreN>0 ? '<span style="background:#dbeafe;color:#1d4ed8;font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px">Core</span>' : '<span style="background:#ffedd5;color:#c2410c;font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px">Extended</span>');
                 return '<tr>'
                     + '<td style="padding:6px 8px;min-width:180px">' + topicCell + '</td>'
                     + '<td style="padding:6px 8px;font-size:10px">' + qPills + '</td>'
@@ -2787,57 +2915,41 @@ renderCards();
             }).join('');
             const topicSummaryHtml = `
             <div style="margin-bottom:28px;page-break-inside:avoid">
-                <h2 style="font-size:14px;font-weight:800;color:#1e293b;margin-bottom:10px;padding-bottom:6px;border-bottom:2px solid #e2e8f0">📊 Summary — ${sortLabel}</h2>
+                <h2 style="font-size:14px;font-weight:800;color:#1e293b;margin-bottom:10px;padding-bottom:6px;border-bottom:2px solid #e2e8f0">📊 Topic Summary Analysis</h2>
                 <table style="width:100%;border-collapse:collapse;font-size:11px">
                     <thead><tr style="background:#f1f5f9">
                         <th style="padding:7px 8px;text-align:left;font-size:10px;color:#475569;font-weight:700;border-bottom:2px solid #e2e8f0">Topic / Subtopic</th>
                         <th style="padding:7px 8px;text-align:left;font-size:10px;color:#475569;font-weight:700;border-bottom:2px solid #e2e8f0">Sub-questions</th>
                         <th style="padding:7px 8px;text-align:center;font-size:10px;color:#475569;font-weight:700;border-bottom:2px solid #e2e8f0">Marks</th>
                         <th style="padding:7px 8px;text-align:left;font-size:10px;color:#475569;font-weight:700;border-bottom:2px solid #e2e8f0">% of Paper</th>
-                        <th style="padding:7px 8px;text-align:center;font-size:10px;color:#475569;font-weight:700;border-bottom:2px solid #e2e8f0">U1/U2</th>
+                        <th style="padding:7px 8px;text-align:center;font-size:10px;color:#475569;font-weight:700;border-bottom:2px solid #e2e8f0">Core/Ext</th>
                     </tr></thead>
                     <tbody>${summaryRows}</tbody>
                 </table>
             </div>`;
 
-            // ── Per-question full cards — with topic dividers in topic mode ──────
-            let lastTopicId2 = null;
-            const cards = orderedResults.map((q,i) => {
+            // ── Per-question full cards ───────────────────────────────────────
+            const cards = sourceData.map((q,i) => {
                 const isRem   = q.syllabusStatus==='removed';
-                const isU1    = q.currType==='Unit 1';
-                const accent  = isRem?'#dc2626':isU1?'#0284c7':'#ea580c';
-                const bgLight = isRem?'#fff1f2':isU1?'#eff6ff':'#fff7ed';
-                const typeLabel = isRem ? 'REMOVED' : (isU1 ? 'UNIT 1' : 'UNIT 2');
+                const isCore  = q.currType==='Unit 1'||q.currType==='Core';
+                const accent  = isRem?'#dc2626':isCore?'#0284c7':'#ea580c';
+                const bgLight = isRem?'#fff1f2':isCore?'#eff6ff':'#fff7ed';
+                const typeLabel = isRem?'REMOVED':(isCore?'UNIT 1':'UNIT 2');
                 const fullRef = `${currentPaperCode?currentPaperCode+'/':''}Q${q.qID}`;
                 const topicPill = q.subtopicId ? (() => {
                     const tn2 = parseInt(q.subtopicId.split('.')[0]);
                     const tname2 = TOPIC_NAMES[tn2] || q.topic || '';
-                    return `<span style="background:#e0e7ff;color:#3730a3;font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px 0 0 4px">Topic ${tn2}. ${tname2}</span><span style="background:#e2e8f0;color:#475569;font-size:10px;padding:2px 8px;border-radius:0 4px 4px 0">Sub-topic: ${q.subtopicId} ${esc(q.subTopic||q.topic||'')}</span>`;
+                    return `<span style="background:#e0e7ff;color:#3730a3;font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px 0 0 4px">Topic ${tn2}. ${esc(tname2)}</span><span style="background:#e2e8f0;color:#475569;font-size:10px;padding:2px 8px;border-radius:0 4px 4px 0">Sub-topic: ${q.subtopicId} ${esc(q.subTopic||q.topic||'')}</span>`;
                 })() : `<span style="background:#e2e8f0;color:#475569;font-size:10px;padding:2px 8px;border-radius:4px">${esc(q.topic||'')}</span>`;
 
                 const section = (icon, label, content, color, bg) =>
                     content && content.trim()
                     ? `<div style="margin-top:10px;padding:10px 12px;background:${bg||'#f8fafc'};border-left:3px solid ${color};border-radius:0 6px 6px 0">
                         <div style="font-size:9px;font-weight:700;color:${color};text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">${icon} ${label}</div>
-                        <div style="font-size:11px;color:#1e293b;line-height:1.65">${cleanFieldForReport(content)}</div>
+                        <div style="font-size:11px;color:#1e293b;line-height:1.65">${esc(content).replace(/<img /g,'<img style="max-width:100%;border-radius:4px;margin:6px 0" ')}</div>
                        </div>` : '';
 
-                // Topic divider for topic order
-                let divider = '';
-                if (sortMode === 'topic') {
-                    const tid = q.subtopicId ? q.subtopicId.split('.')[0] : '0';
-                    if (tid !== lastTopicId2) {
-                        lastTopicId2 = tid;
-                        const tNum3 = parseInt(tid)||0;
-                        const tName3 = (tNum3 && TOPIC_NAMES[tNum3]) ? TOPIC_NAMES[tNum3] : (q.topic||'');
-                        divider = `<div style="display:flex;align-items:center;gap:12px;margin:28px 0 12px;page-break-after:avoid">
-                            <div style="background:#1e293b;color:white;padding:8px 16px;border-radius:8px;font-weight:900;font-size:13px;white-space:nowrap">📚 Topic ${tNum3}</div>
-                            <div style="font-size:13px;font-weight:700;color:#1e293b">${tName3}</div>
-                        </div>`;
-                    }
-                }
-
-                return divider + `<div class="qcard" style="background:white;border:1.5px solid ${accent};border-radius:10px;margin-bottom:24px;overflow:hidden;page-break-inside:avoid">
+                return `<div style="background:white;border:1.5px solid ${accent};border-radius:10px;margin-bottom:24px;overflow:hidden;page-break-inside:avoid">
                     <div style="background:${bgLight};padding:12px 16px;border-bottom:1px solid ${accent}30">
                         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
                             <div>
@@ -2849,8 +2961,8 @@ renderCards();
                             </div>
                             <div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end;align-items:center;flex-shrink:0">
                                 <span style="background:${accent};color:white;font-size:9px;font-weight:700;padding:2px 8px;border-radius:99px">${typeLabel}</span>
-                                <span style="background:#f3e8ff;color:#7c3aed;font-size:9px;font-weight:700;padding:2px 8px;border-radius:99px">${q.marks||'?'} marks</span>
-                                <span style="font-size:9px;color:#94a3b8">${i+1}/${orderedResults.length}</span>
+                                <span style="background:#e0f2fe;color:#0369a1;font-size:9px;font-weight:700;padding:2px 8px;border-radius:99px">${q.marks||'?'} marks</span>
+                                <span style="font-size:9px;color:#94a3b8">${i+1}/${currentResults.length}</span>
                             </div>
                         </div>
                     </div>
@@ -2860,11 +2972,8 @@ renderCards();
                         ${section('🏆','Model Answer', q.model, '#4f46e5', '#eef2ff')}
                         ${section('📖','Concept Explanation', q.explanation, '#0891b2', '#ecfeff')}
                         
-                        ${section('⚠️','Common Mistakes', q.commonMistakes, '#dc2626', '#fff1f2')}
-                        ${section('💡','Exam Tips', q.examTips, '#059669', '#f0fdf4')}
-                        ${section('💬','Examiner Feedback / Teacher Comment', q.feedback, '#d97706', '#fffbeb')}
-                        ${section('🎓','Tutor Note', q.tutorNote, '#6d28d9', '#f5f3ff')}
-                        ${isRem?section('🚫','REMOVED — Do Not Study','This topic was removed from the current Edexcel IGCSE syllabus.','#dc2626','#fff1f2'):''}
+                                            ${section('💬','Examiner Feedback / Teacher Comment', q.feedback, '#d97706', '#fffbeb')}
+                                            ${isRem?section('🚫','REMOVED — Do Not Study','This topic was removed from the 2026-2028 Cambridge IGCSE Biology syllabus.','#dc2626','#fff1f2'):''}
                     </div>
                 </div>`;
             }).join('');
@@ -2874,46 +2983,70 @@ renderCards();
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:'Segoe UI',Arial,sans-serif;padding:24px;color:#1e293b;font-size:12px;max-width:900px;margin:0 auto}
-  img{max-width:100%;border-radius:4px;margin:6px 4px 6px 0;display:inline-block;vertical-align:top;height:auto}
-  .img-row{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0;align-items:flex-start}
-  b,strong{font-weight:700}
-  .qcard{break-inside:avoid;page-break-inside:avoid}
-  .qcard *{break-inside:avoid;page-break-inside:avoid}
-  .topic-divider{break-after:avoid;page-break-after:avoid}
   @media print{
     body{padding:10px;max-width:none}
-    @page{margin:12mm 14mm;size:A4}
     .no-print{display:none}
-    .qcard{break-inside:avoid!important;page-break-inside:avoid!important;overflow:visible!important}
+    div[style*="page-break-inside:avoid"]{break-inside:avoid!important;page-break-inside:avoid!important}
+    .qcard{break-inside:avoid!important;page-break-inside:avoid!important}
     .qcard *{break-inside:avoid!important;page-break-inside:avoid!important}
-    .topic-divider{break-after:avoid!important;page-break-after:avoid!important}
-    img{max-width:100%!important;page-break-inside:avoid!important}
-    [data-img-wrapper] > div{display:none!important}
-    [data-img-wrapper] > button{display:none!important}
+    @page{margin:12mm 14mm;size:A4}
   }
+        [contenteditable="true"]:hover { background-color: rgba(99,102,241,0.04); cursor: text; }
+        [contenteditable="true"]:focus { background-color: #fff; }
+        [data-field="text"] .img-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; clear: both; width: 100%; }
+        [data-field="text"] { display: flex; flex-direction: column; }
+        [data-field="ms"] .img-row, [data-field="model"] .img-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+        [contenteditable="true"]::after { content: ' ✏️'; opacity: 0; font-size: 10px; }
+        [contenteditable="true"]:hover::after { opacity: 0.4; }
+        /* ── HTML question text rendering ── */
+        .q-subpart { display:flex; gap:8px; align-items:baseline; padding:5px 0; border-bottom:0.5px solid #e2e8f0; }
+        .q-subpart:last-child { border-bottom:none; }
+        .q-label { display:inline-flex; align-items:center; justify-content:center; background:#1e40af; color:#dbeafe; font-size:10px; font-weight:700; padding:2px 7px; border-radius:10px; white-space:nowrap; flex-shrink:0; font-family:monospace; }
+        .q-label.ext { background:#92400e; color:#fef3c7; }
+        .q-label.mixed { background:#4c1d95; color:#ede9fe; }
+        .q-stem { font-size:12.5px; color:#334155; margin:0 0 8px; padding-bottom:8px; border-bottom:0.5px solid #e2e8f0; font-style:normal; }
+        .q-body { font-size:12.5px; color:#334155; flex:1; line-height:1.65; }
+        .q-marks-pill { display:inline-block; background:#f1f5f9; border:0.5px solid #cbd5e1; border-radius:8px; font-size:10px; color:#64748b; padding:1px 6px; margin-left:5px; white-space:nowrap; }
+        .q-ans-line { display:block; border-bottom:0.5px solid #94a3b8; height:18px; margin:5px 0; }
+        .q-fig { background:#f8fafc; border:0.5px dashed #94a3b8; border-radius:6px; padding:8px 12px; font-size:11px; color:#64748b; text-align:center; margin:6px 0; }
+        .q-table { border-collapse:collapse; width:100%; font-size:11.5px; margin:6px 0 10px; }
+        .q-table th { background:#1e3a5f; color:#dbeafe; padding:4px 8px; font-weight:600; border:0.5px solid #1e40af; text-align:left; }
+        .q-table td { padding:4px 8px; border:0.5px solid #e2e8f0; color:#334155; }
+        .q-table tr:nth-child(even) td { background:#f8fafc; }
+        /* ── Mark scheme structured prefixes ── */
+        .ms-line { display:flex; gap:7px; align-items:baseline; padding:3px 0; border-bottom:0.5px solid #f1f5f9; font-size:11.5px; }
+        .ms-line:last-child { border-bottom:none; }
+        .ms-icon { flex-shrink:0; width:18px; font-size:13px; }
+        .ms-correct { color:#065f46; }
+        .ms-alt { color:#374151; }
+        .ms-reject { color:#991b1b; }
+        .ms-note { color:#5b21b6; font-style:italic; }
+        /* ── Model answer numbered steps ── */
+        .step-list { list-style:none; padding:0; margin:0; }
+        .step-item { display:flex; gap:8px; align-items:baseline; padding:3px 0; font-size:11.5px; color:#334155; }
+        .step-num { flex-shrink:0; width:20px; height:20px; background:#e0e7ff; color:#3730a3; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-size:10px; font-weight:700; }
 </style></head><body>
 <div style="border-bottom:3px solid #4f46e5;padding-bottom:14px;margin-bottom:20px">
   <div style="display:flex;justify-content:space-between;align-items:flex-start">
     <div>
-      <h1 style="color:#4f46e5;font-size:20px;font-weight:800">Edexcel IGCSE Analysis Report <span style="background:#eef2ff;color:#4f46e5;font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;vertical-align:middle">v1.0</span></h1>
-      <div style="color:#64748b;font-size:11px;margin-top:4px">📄 <strong>${paper}</strong> &nbsp;·&nbsp; 📅 ${new Date().toLocaleString()} &nbsp;·&nbsp; 📚 Edexcel IGCSE Biology &nbsp;·&nbsp; 📋 ${sortLabel}${filterNote}</div>
+      <h1 style="color:#4f46e5;font-size:20px;font-weight:800">Cambridge Biology 0610 — Analysis Report <span style="background:#eef2ff;color:#4f46e5;font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;vertical-align:middle">v51.1</span></h1>
+      <div style="color:#64748b;font-size:11px;margin-top:4px">📄 <strong>${paper}</strong> &nbsp;·&nbsp; 📅 ${new Date().toLocaleString()} &nbsp;·&nbsp; 📚 Cambridge IGCSE Biology 0610 (2026–2028) &nbsp;·&nbsp; ${sortMode==='topic'?'Topic Order':'Exam Order'}</div>
     </div>
     <div class="no-print" style="display:flex;gap:6px">
-      <button onclick="(function(){const b=new Blob([document.documentElement.outerHTML],{type:'text/html'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='${buildReportFilename(currentPaperCode||paper||'Unknown','PrintReport',sortMode,unitFilter)}.html';a.click();URL.revokeObjectURL(a.href);})()" style="background:#16a34a;color:white;border:none;padding:8px 14px;border-radius:6px;font-weight:700;cursor:pointer;font-size:11px">💾 Save HTML</button>
       <button onclick="window.print()" style="background:#4f46e5;color:white;border:none;padding:8px 16px;border-radius:6px;font-weight:700;cursor:pointer;font-size:11px">🖨️ Print</button>
     </div>
   </div>
   <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap">
-    <div style="padding:10px 16px;border-radius:8px;background:#eff6ff;border:1px solid #bfdbfe;min-width:90px"><div style="font-size:9px;font-weight:700;color:#94a3b8;text-transform:uppercase">🔵 Unit 1</div><div style="font-size:22px;font-weight:800;color:#0284c7">${coreCount}</div></div>
-    <div style="padding:10px 16px;border-radius:8px;background:#fff7ed;border:1px solid #fed7aa;min-width:90px"><div style="font-size:9px;font-weight:700;color:#94a3b8;text-transform:uppercase">🟠 Unit 2</div><div style="font-size:22px;font-weight:800;color:#ea580c">${extCount}</div></div>
-    <div style="padding:10px 16px;border-radius:8px;background:#fff1f2;border:1px solid #fecdd3;min-width:90px"><div style="font-size:9px;font-weight:700;color:#94a3b8;text-transform:uppercase">🟥 Removed</div><div style="font-size:22px;font-weight:800;color:#dc2626">${remCount}</div></div>
-    <div style="padding:10px 16px;border-radius:8px;background:#faf5ff;border:1px solid #e9d5ff;min-width:90px"><div style="font-size:9px;font-weight:700;color:#94a3b8;text-transform:uppercase">📊 Marks</div><div style="font-size:22px;font-weight:800;color:#7c3aed">${totalMarks}</div></div>
+    <div style="padding:10px 16px;border-radius:8px;background:#eff6ff;border:1px solid #bfdbfe;min-width:90px"><div style="font-size:9px;font-weight:700;color:#94a3b8;text-transform:uppercase">🔵 Core</div><div style="font-size:22px;font-weight:800;color:#0284c7">${sourceData.filter(q=>q.currType==='Unit 1'||q.currType==='Core').length}</div></div>
+    <div style="padding:10px 16px;border-radius:8px;background:#fff7ed;border:1px solid #fed7aa;min-width:90px"><div style="font-size:9px;font-weight:700;color:#94a3b8;text-transform:uppercase">🟠 Extended</div><div style="font-size:22px;font-weight:800;color:#ea580c">${sourceData.filter(q=>q.currType==='Unit 2'||q.currType==='Extended').length}</div></div>
+    <div style="padding:10px 16px;border-radius:8px;background:#fff1f2;border:1px solid #fecdd3;min-width:90px"><div style="font-size:9px;font-weight:700;color:#94a3b8;text-transform:uppercase">🟥 Removed</div><div style="font-size:22px;font-weight:800;color:#dc2626">${sourceData.filter(q=>q.syllabusStatus==='removed').length}</div></div>
+    <div style="padding:10px 16px;border-radius:8px;background:#faf5ff;border:1px solid #e9d5ff;min-width:90px"><div style="font-size:9px;font-weight:700;color:#94a3b8;text-transform:uppercase">📊 Marks</div><div style="font-size:22px;font-weight:800;color:#7c3aed">${sourceData.reduce((s,q)=>s+(parseInt(q.marks)||0),0)}</div></div>
   </div>
 </div>
 ${topicSummaryHtml}
 ${cards}
 <div style="margin-top:24px;color:#94a3b8;font-size:10px;border-top:1px solid #e2e8f0;padding-top:10px;text-align:center">
-  Generated by Edexcel IGCSE Processor v1.0 · Edexcel Biology · Classification by Gemini AI · ${sortLabel}
+  Generated by IGCSE Processor v51.1 · Cambridge 0610 Biology (2026–2028) · Classification by Gemini AI
 </div>
 </body></html>`;
             pw.document.write(html);
@@ -2921,7 +3054,6 @@ ${cards}
         }
 
 
-        // Returns the subset of currentResults matching the active filter controls
         function getFilteredResults() {
             if (!currentResults.length) return [];
             const searchTerm = document.getElementById('search-questions')?.value.toLowerCase() || '';
@@ -3096,8 +3228,7 @@ ${cards}
                 if (subjectInput && !subjectInput.value.trim() && subjectName && paperCode) {
                     const detection = detectSubject(paperCode + ' ' + subjectName);
                     const board = 'Edexcel';
-                    const subjectProper=subjectName.split(' ').map(w=>w.charAt(0).toUpperCase()+w.slice(1).toLowerCase()).join(' ');
-                    subjectInput.value = `${board} IGCSE ${subjectProper} ${paperCode}`;
+                    subjectInput.value = `${board} ${subjectName} ${paperCode}`;
                     status.innerText = "✓ Auto-detected";
                     loadHardcodedSyllabus(); // reload syllabus for detected subject
 
@@ -3128,31 +3259,123 @@ ${cards}
                 container.innerHTML = '<span class="text-slate-400 text-xs italic">No questions extracted yet.</span>';
                 return;
             }
-            const lines = text.split('\n').filter(l => l.trim());
-            container.innerHTML = lines.map(line => {
-                let html = line
-                    // [UNIT1] badge
-                    .replace(/\[UNIT1\]/g, '<span class="inline-block bg-blue-100 text-blue-700 font-bold px-1.5 py-0.5 rounded text-[10px] mx-0.5">[UNIT1]</span>')
-                    // [UNIT2] badge
-                    .replace(/\[UNIT2\]/g, '<span class="inline-block bg-orange-100 text-orange-700 font-bold px-1.5 py-0.5 rounded text-[10px] mx-0.5">[UNIT2]</span>')
-                    // [B] Biology-only badge
-                    .replace(/\[B\]/g, '<span class="inline-block bg-purple-100 text-purple-700 font-bold px-1.5 py-0.5 rounded text-[10px] mx-0.5" title="Biology-only — not in Science Double Award">[B]</span>')
-                    // [X marks] badge
+
+            function applyPills(html) {
+                return html
+                    .replace(/\[CORE\/EXTENDED\]/g, '<span class="inline-block bg-purple-100 text-purple-700 font-bold px-1.5 py-0.5 rounded text-[10px] mx-0.5">[CORE/EXTENDED]</span>')
+                    .replace(/\[CORE\]/g,     '<span class="inline-block bg-blue-100 text-blue-700 font-bold px-1.5 py-0.5 rounded text-[10px] mx-0.5">[UNIT1]</span>')
+                    .replace(/\[EXTENDED\]/g, '<span class="inline-block bg-orange-100 text-orange-700 font-bold px-1.5 py-0.5 rounded text-[10px] mx-0.5">[UNIT2]</span>')
                     .replace(/\[(\d+) marks?\]/gi, '<span class="inline-block bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded text-[10px] mx-0.5">[$1 marks]</span>')
-                    // [Topic X.X SubtopicName] — show BOTH parent topic AND subtopic
-                    .replace(/\[(?:Topic )?([\d]+)\.([\d]+)[:\s–-]*([^\]]+)\]/g, (match, topicN, subN, subName) => {
-                        const topicNum = parseInt(topicN);
-                        const parentName = TOPIC_NAMES[topicNum] || `Topic ${topicNum}`;
-                        const subtopicId = `${topicN}.${subN}`;
-                        return `<span class="inline-flex items-center gap-0.5 mx-0.5">` +
-                            `<span class="inline-block bg-indigo-100 text-indigo-700 font-bold px-1.5 py-0.5 rounded-l text-[10px]">📚 T${topicNum}: ${parentName}</span>` +
-                            `<span class="inline-block bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded-r text-[10px]">${subtopicId} ${subName.trim()}</span>` +
-                            `</span>`;
-                    })
-                    // Bold question ID
-                    .replace(/^(Q\d+(?:\([^)]+\))+):/, '<span class="font-bold text-slate-800">$1</span>:');
-                return `<div class="py-1 border-b border-slate-100">${html}</div>`;
-            }).join('');
+                    .replace(/\[(?:Topic )?([\d]+)\.([\d]+)[:\s\u2013-]*([^\]]+)\]/g, function(_, tN, sN, sName) {
+                        const tNum = parseInt(tN);
+                        const parentName = TOPIC_NAMES[tNum] || ('Topic ' + tNum);
+                        return '<span class="inline-flex items-center gap-0.5 mx-0.5">' +
+                            '<span class="inline-block bg-indigo-100 text-indigo-700 font-bold px-1.5 py-0.5 rounded-l text-[10px]">\uD83D\uDCDA T' + tNum + ': ' + parentName + '</span>' +
+                            '<span class="inline-block bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded-r text-[10px]">' + tN + '.' + sN + ' ' + sName.trim() + '</span></span>';
+                    });
+            }
+
+            const lines = text.split('\n').filter(l => l.trim());
+
+            // Parse into parent groups for hierarchical display
+            // Each line: Q1(a)(i): stem text. Sub-instruction. [marks] [TYPE] [Topic]
+            const groups = {}; // parentNum → { stem, children[] }
+            const order  = []; // parent numbers in order
+
+            lines.forEach(line => {
+                const m = line.match(/^Q(\d+)(\([^)]+\)(?:\([^)]+\))*)?:\s*(.*)/);
+                if (!m) return;
+                const parentNum = m[1];
+                const parts     = m[2] || ''; // e.g. "(a)(i)"
+                const body      = m[3] || '';
+
+                if (!groups[parentNum]) { groups[parentNum] = { stem: '', children: [] }; order.push(parentNum); }
+
+                if (!parts) {
+                    // Bare parent Q line (Q1:)
+                    groups[parentNum].stem = body;
+                } else {
+                    // Sub-question — extract the stem (text before the sub-instruction)
+                    // The stem is repeated at the start of every child
+                    // Detect it: if this is the first child, everything before the actual instruction is stem
+                    const existingStem = groups[parentNum].stem;
+                    // Try to extract stem: text before [marks] or before the instruction verb
+                    // Simple approach: if stem is empty, try to detect repeated prefix across siblings
+                    groups[parentNum].children.push({ parts, body, line });
+                }
+            });
+
+            // Now detect repeated stem prefix across siblings and extract it
+            order.forEach(parentNum => {
+                const g = groups[parentNum];
+                if (g.children.length === 0) return;
+                if (g.stem) return; // already have stem from bare Q line
+
+                // Find longest common prefix across all children (before any [mark] or [CORE] tag)
+                const bodies = g.children.map(ch => {
+                    // Strip marks and classification tags to find the instruction part
+                    return ch.body.replace(/\[\d+ marks?\][\s\S]*/i, '').replace(/\[CORE[^\]]*\]/, '').trim();
+                });
+
+                if (bodies.length < 2) {
+                    // Single child — just use as-is, no stem extraction
+                    return;
+                }
+
+                // Find common prefix words
+                const words0 = bodies[0].split(' ');
+                let commonLen = words0.length;
+                for (let bi = 1; bi < bodies.length; bi++) {
+                    const words = bodies[bi].split(' ');
+                    let match = 0;
+                    while (match < commonLen && match < words.length && words0[match] === words[match]) match++;
+                    commonLen = match;
+                }
+
+                // Only extract if common prefix is at least 4 words (meaningful stem)
+                if (commonLen >= 4) {
+                    g.stem = words0.slice(0, commonLen).join(' ');
+                }
+            });
+
+            // Render
+            let html = '';
+            order.forEach(parentNum => {
+                const g = groups[parentNum];
+
+                // Parent Q line: strip marks/type/topic — show stem text only
+                const cleanStem = g.stem
+                    ? g.stem
+                        .replace(/\[\d+\s*marks?\]/gi, '')
+                        .replace(/\[CORE\/EXTENDED\]/g, '')
+                        .replace(/\[CORE\]/g, '')
+                        .replace(/\[EXTENDED\]/g, '')
+                        .replace(/\[(?:Topic )?[\d]+\.[\d]+[^\]]*\]/g, '')
+                        .trim()
+                    : '';
+                const displayStem = (cleanStem === '(no shared stem)' || cleanStem === 'Independent sub-questions.' || !cleanStem) ? '' : cleanStem;
+                html += '<div class="mt-3 mb-1 text-slate-800 text-[12.5px] border-b border-slate-200 pb-1 leading-snug">' +
+                        '<span class="font-bold text-indigo-600 font-mono mr-1">Q' + parentNum + ':</span>' +
+                        (displayStem || '') +
+                        '</div>';
+
+                // Children
+                g.children.forEach(ch => {
+                    // Remove the repeated stem from the body if we extracted it
+                    let displayBody = ch.body;
+                    if (g.stem && displayBody.startsWith(g.stem)) {
+                        displayBody = displayBody.slice(g.stem.length).trim();
+                        if (displayBody.startsWith('.') || displayBody.startsWith(',')) displayBody = displayBody.slice(1).trim();
+                    }
+
+                    const rendered = applyPills(displayBody);
+                    html += '<div class="py-1 pl-4 border-b border-slate-100 text-xs font-mono">' +
+                            '<span class="font-bold text-slate-700 mr-1">Q' + parentNum + ch.parts + ':</span>' +
+                            rendered + '</div>';
+                });
+            });
+
+            container.innerHTML = html || '<span class="text-slate-400 text-xs italic">No questions parsed.</span>';
         }
 
         // v52: autoExtract — Gemini vision only, no pdfjs
@@ -3190,16 +3413,27 @@ IGNORE COMPLETELY — do NOT include in any output:
 - Any reading or transcription of diagram labels, axis values, table data, or figure content — these are not part of the question text
 
 For EACH question and sub-part found, write ONE line in this EXACT format (all on one single line):
-Q[number]([part]): <complete question text only — no dots, no blanks> [X marks] [CORE or EXTENDED or CORE/EXTENDED] [Topic N.N SubtopicName]
+Q[number]([part]): <complete question text only — no dots, no blanks> [X marks] [CORE or EXTENDED] [Topic N.N SubtopicName]
 
-RULE: [X marks] is REQUIRED on every line. Count the marks from the mark scheme or the number in brackets on the paper (e.g. "[3]" = [3 marks]). Never omit it.
+RULE: [X marks] is REQUIRED on every CHILD sub-question line. Count marks from the paper. Never omit.
+
+PARENT QUESTION LINE — REQUIRED BEFORE EACH GROUP OF SUB-QUESTIONS:
+Output ONE bare parent line per main question number (Q1, Q2, Q3…) immediately before its sub-questions:
+Q[number]: <full parent/stem text — the shared context or scenario for this question>
+Example:  Q2: Chickens are birds that are bred by farmers. Table 2.1 shows characteristics of red junglefowl and farmed chickens.
+If the main question has no shared stem (each sub-part is independent), still output: Q[number]: (no shared stem)
+
+SUB-QUESTION LINES — one line per sub-part, immediately after the parent line:
+Q[number]([part]): <sub-question instruction only — do NOT repeat the parent stem here> [X marks] [CORE or EXTENDED] [Topic N.N SubtopicName]
+Example:  Q2(a)(i): Calculate the percentage change in mean body mass. Give your answer to 3 s.f. [3 marks] [CORE] [Topic 18.3 Selection]
 
 CRITICAL — question text rules by question type:
-Always begin with Q[number]([part]): so it is clear which question it is (e.g. Q1(a)(i):).
-- PARENT STEM: Every sub-question MUST start with the full parent stem. Never output a bare sub-part without parent context. Example: Q1(a)(i): The diagram shows a mitochondrion. State its function. [1 mark] ...
+Always begin each line with Q[number]: or Q[number]([part]): exactly.
+- Each sub-question instruction is concise — it does NOT include the parent stem text.
+- MULTIPLE CHOICE: Write all options A, B, C, D in full with their text. Example: Q3(a): Which feature is found in plant cells? A Cell wall B Mitochondria C Ribosome D Nucleus [1 mark]
 - MULTIPLE CHOICE: Write all options A, B, C, D in full with their text. Example: Q3: Which feature is found in plant cells but not animal cells? A Carbon dioxide B Cell wall C Cytoplasm D Cell membrane [1 mark] [CORE] [Topic N.N ...]
 - FILL IN THE BLANKS: Reproduce the sentence with .............. dots exactly where the blanks are.
-- COMPLETE THE TABLE: Describe the full table structure — all column headers, row labels, any given data already filled in, and mark empty cells as [blank].
+- COMPLETE THE TABLE: Describe the full table structure — all column headers, row labels, any given data already filled in, and leave empty cells as empty (just |  |).
 - CALCULATIONS: Include all given numerical values with units and the exact instruction. Example: Q5(b): The cell is 0.05 mm long. Calculate the length in micrometres. Show your working. [2 marks] ...
 - DIAGRAMS / GRAPHS: Describe every axis title, axis scale/range, all labelled features, and key data values in square brackets so the question is self-contained without the image. Example: [Fig. 2 shows: x-axis = Time (minutes) 0–60; y-axis = Rate of photosynthesis (cm³/min) 0–5; data: rises from 0.5 at 0 min to 4.8 at 30 min then plateaus at 5.0]
 - Do NOT include answer lines, blank answer boxes, or answer-space formatting
@@ -3211,6 +3445,21 @@ Use [EXTENDED] when the entire question tests Extended/Supplement content only.
 Use [CORE] for all other questions.
 
 Extended keywords → [EXTENDED]: water potential, plasmolysis, glucagon, fibrinogen, auxin, meiosis, mitosis, DNA base pairing, nephron, lymphocyte, phagocyte, eutrophication, codominance, test cross, FSH, LH, goblet cells, ciliated cells, cilia, mucus protect, pollen tube, oxygen debt, fermenter, restriction enzyme, vaccination mechanism, pyramid of energy comparison, percentage energy transfer, genetic variation, diabetes treatment (insulin injection/pump), antibiotic resistance mechanism, hydrophyte adaptation, xerophyte adaptation, monocotyledon features, dicotyledon features, cartilage function in breathing system, breathing rate control (CO2/brain), blood glucose regulation detail (mechanism of insulin/glucagon, named cells), transpiration factors, translocation, maltase and specific enzyme products (maltase→glucose, pepsin→amino acids), fermenter for industrial antibiotic/penicillin production (NOT yeast bread/biofuel which is Core), kingdoms of fungi/protoctista identification.
+
+CRITICAL EXTENDED corrections (verified against Cambridge 0610 2026-2028 syllabus):
+- Classifying plants into ferns / flowering plants / dicotyledons / monocotyledons → [EXTENDED] [Topic 1.3]  (Core only requires animal/vertebrate groups)
+- Urea formation, deamination, amino acid breakdown → [EXTENDED] [Topic 13.1]
+- Explaining WHY wilting occurs (turgor pressure, water potential) → [EXTENDED] [Topic 8.3]  (Stating that plants wilt = Core)
+- Explaining effect of temperature/humidity/wind speed on transpiration rate → [EXTENDED] [Topic 8.3]  (Stating rate changes = Core; explaining mechanism = Extended)
+- Identifying atrioventricular valves or semilunar valves → [EXTENDED] [Topic 9.2]  (General valve mention = Core)
+- Explaining relative thickness of ventricle/atria walls → [EXTENDED] [Topic 9.2]
+- Describing cardiac cycle / sequence of blood flow through heart chambers → [EXTENDED] [Topic 9.2]
+- Explaining WHY heart rate changes with exercise (mechanism) → [EXTENDED] [Topic 9.2]  (Stating heart rate changes = Core)
+- Explaining eutrophication process (mechanism) → [EXTENDED] [Topic 20.3]
+- Selective breeding / artificial selection → [CORE] [Topic 18.3 Selection]  NOT Topic 21
+- Exercise effect on heart rate (with fig showing data/graph) → [Topic 9.2] NOT [Topic 11.1]
+- Septum separating oxygenated/deoxygenated blood = [CORE]; identifying atrioventricular valve = [EXTENDED] → use [CORE/EXTENDED] if question asks both
+- Balanced CHEMICAL equation for photosynthesis (6CO₂ + 6H₂O → C₆H₁₂O₆ + 6O₂) → [EXTENDED]  (word equation = Core)
 
 Core keywords → [CORE]: diffusion (basic), osmosis (basic), photosynthesis (word equation only), enzyme (basic role), food chain, carbon cycle, state/name/identify a fact, yeast in bread-making, yeast in biofuel/fermentation (basic use), basic blood glucose control (insulin lowers/glucagon raises), state what antibiotics kill (bacteria), name of genus/species in binomial system. NOTE: balanced CHEMICAL equation for respiration = [EXTENDED] (supplement only). Word equation for respiration = [CORE]. Balanced symbol equation = always [EXTENDED].
 
@@ -3299,14 +3548,14 @@ CLASSIFICATION RULES:
 ${detectedSubjectKey === "cambridge_biology_0610" || !detectedSubjectKey ? biologyRef : (getClassificationRef(detectedSubjectKey) || biologyRef)}Full syllabus reference:
 ${syllabusForPrompt.substring(0, 12000)}
 
-List every question and every sub-part. Do not skip any. One line per sub-question.
-IMPORTANT: Continue until you reach the LAST question on the LAST page. Do not stop early.`;
+Work through every page of the exam from first to last. Output EVERY parent question and EVERY sub-part.
+List every question and every sub-part. Do not skip any. One line per sub-question.`;
                 const geminiPayload = {
                     contents: [{ parts: [
                         { inlineData: { data: uploadedFiles.exam.data, mimeType: uploadedFiles.exam.mimeType } },
                         { text: extractPrompt }
                     ]}],
-                    generationConfig: { temperature: 0.1 }
+                    generationConfig: { temperature: 0.1, maxOutputTokens: 65536 }
                 };
                 const data = await callAPI(geminiPayload, extractPrompt, [uploadedFiles.exam.data], 90000); // 90s for exam PDF extraction
 
@@ -3317,19 +3566,20 @@ IMPORTANT: Continue until you reach the LAST question on the LAST page. Do not s
                 if (qt) qt.value = extractedText;
                 renderConsole(extractedText);
 
+                // Parse hierarchical format: •(a)(i) lines with [CORE]/[EXTENDED] and [Topic N.N]
                 // Parse and store classifications for use by analyzeDocuments
                 window.extractedClassifications = {};
                 window.extractedTopics = {}; // qID → { subtopicId, topicNum, subName }
                 const qLines = extractedText.split('\n');
                 qLines.forEach(line => {
-                    // Parse Unit 1/Unit 2 classification
-                    const m = line.match(/^Q([\d]+)\(([^)]+)\)(?:\(([^)]+)\))?(?:\(([^)]+)\))?\s*:.*?\[(UNIT1|UNIT2)\]/);
+                    // Parse Core/Extended classification
+                    const m = line.match(/^Q([\d]+)\(([^)]+)\)(?:\(([^)]+)\))?(?:\(([^)]+)\))?\s*:.*?\[(CORE\/EXTENDED|CORE|EXTENDED)\]/);
                     if (m) {
                         let qid = m[1] + '(' + m[2] + ')';
                         if (m[3]) qid += '(' + m[3] + ')';
                         if (m[4]) qid += '(' + m[4] + ')';
                         const t = m[5];
-                        window.extractedClassifications[qid] = t === 'UNIT1' ? 'Unit 1' : 'Unit 2';
+                        window.extractedClassifications[qid] = t === 'CORE/EXTENDED' ? 'Core/Extended' : t === 'CORE' ? 'Core' : 'Extended';
                         // Parse topic tag: [Topic 19.1 Energy flow] or [Topic 19.1 Food chains...]
                         const topicM = line.match(/\[(?:Topic )?([\d]+)\.([\d]+)[:\s–-]*([^\]]+)\]/);
                         if (topicM) {
@@ -3343,12 +3593,12 @@ IMPORTANT: Continue until you reach the LAST question on the LAST page. Do not s
                 });
                 console.log('[AutoExtract] Stored classifications:', window.extractedClassifications);
 
-                const coreCount = (extractedText.match(/\[UNIT1\]/g) || []).length;
-                const extCount  = (extractedText.match(/\[UNIT2\]/g) || []).length;
-                const bioOnlyCount = (extractedText.match(/\[B\]/g) || []).length;
-                const topicCount = (extractedText.match(/\[Topic /g) || []).length;
+                const coreCount  = extractedText.split('\n').filter(l => /^Q\d+\(/.test(l) && l.includes('[CORE]')).length;
+                const extCount   = extractedText.split('\n').filter(l => /^Q\d+\(/.test(l) && (l.includes('[EXTENDED]') || l.includes('[CORE/EXTENDED]'))).length;
+                const mixedCount = 0;
+                const topicCount = extractedText.split('\n').filter(l => /^Q\d+\(/.test(l) && l.includes('[Topic ')).length;
                 isExtracting=false;checkInputs();
-                setExtractionStatus('complete', `✅ READY — ${coreCount} Unit 1 · ${extCount} Unit 2${bioOnlyCount>0?' · '+bioOnlyCount+' [B] Biology-only':''} · ${topicCount} topics tagged`);
+                setExtractionStatus('complete', `✅ READY — ${coreCount} Unit 1 · ${extCount} Unit 2 · ${topicCount} topics tagged`);
 
 
                 // ── Show review modal ──────────────────────────────────────
@@ -3404,15 +3654,18 @@ IMPORTANT: Continue until you reach the LAST question on the LAST page. Do not s
             const lcKeys = Object.keys(lc);
             if (lcKeys.length > 0) {
                 lockedClassTable = '\n\nLOCKED CLASSIFICATIONS — from pre-analysis (DO NOT OVERRIDE THESE):\n';
-                lockedClassTable += 'These Unit 1/Unit 2 values were determined by careful analysis of the exam questions. ';
+                lockedClassTable += 'These Core/Extended values were determined by careful analysis of the exam questions. ';
                 lockedClassTable += 'Use them EXACTLY as given for the currType field. Do not re-classify.\n';
                 lcKeys.forEach(qid => {
-                    lockedClassTable += `  Q${qid}: ${lc[qid]}\n`;
+                    const topicInfo = (window.extractedTopics || {})[qid];
+                    const topicStr  = topicInfo ? ` [Topic ${topicInfo.subtopicId} ${topicInfo.subName}]` : '';
+                    lockedClassTable += `  Q${qid}: ${lc[qid]}${topicStr}\n`;
                 });
                 lockedClassTable += 'If a question ID is not listed above, classify it yourself using the reference below.\n';
+                lockedClassTable += 'TOPIC: where a [Topic N.N] is given above, use that subtopicId and subTopic — do not re-derive the topic from scratch.\n';
             }
 
-            const sysPrompt = `You are an expert Pearson Edexcel International GCSE examiner analyzing a Biology or Chemistry exam paper, its mark scheme, and (if provided) a teacher comments / examiner report PDF.
+            const sysPrompt = `You are an expert Cambridge IGCSE examiner analyzing a Biology exam paper, its mark scheme, and (if provided) a teacher comments / examiner report PDF.
 
 READ EVERY SINGLE PAGE of every uploaded PDF. Do not skip any page. Do not summarise or truncate. This includes:
 - Every question and every sub-part (1a, 1b, 1b(i), 1b(ii), etc.)
@@ -3420,17 +3673,17 @@ READ EVERY SINGLE PAGE of every uploaded PDF. Do not skip any page. Do not summa
 - Every mark scheme point for every sub-part
 - All examiner/teacher comments if a comments PDF was uploaded
 
-${lockedClassTable}CLASSIFICATION — the currType for every sub-question is already determined and provided in the LOCKED CLASSIFICATIONS table above. You do NOT need to classify anything yourself. Your only job is to generate the content fields (text, ms, model, explanation, steps, commonMistakes, examTips, feedback, tutorNote) for each question.
+${lockedClassTable}CLASSIFICATION — the currType for every sub-question is already determined and provided in the LOCKED CLASSIFICATIONS table above. You do NOT need to classify anything yourself. Your only job is to generate the content fields (text, ms, model, explanation, steps, feedback) for each question.
 
-For ALL Edexcel Biology papers (linear 4BI1 and modular 4XBI1): classify by which Edexcel unit the topic belongs to — "Unit 1" or "Unit 2". There is NO Core/Extended distinction in Edexcel — only Unit 1 and Unit 2. For modular papers: Unit 1 paper = all Unit 1 topics, Unit 2 paper = all Unit 2 topics. For linear papers: classify by topic regardless of Foundation/Higher tier.
+For Edexcel LINEAR (4BI1/4CH1): Section A = "Core", Section B = "Extended". For Edexcel MODULAR (4XBI1/4XCH1): UNTIERED — use "Core" for Unit 1 topics, "Extended" for Unit 2 topics (unit paper indicator, not difficulty). For Cambridge papers: Core = "Core", Supplement/Extended = "Extended".
 
 For the rare case where a question ID is not in the locked table:
-- "Unit 1" = concept is taught in Unit 1 of the Edexcel modular specification
-- "Unit 2" = concept is taught in Unit 2 of the Edexcel modular specification
-- Default to "Unit 1" if genuinely uncertain
+- "Core" = concept is in the C/Section A column of the reference below
+- "Extended" = concept is ONLY in the E/Section B column
+- "Core/Extended" = sub-question contains both a Core and an Extended task
 - "removed" = topic no longer in current syllabus
 
-${!_subjectKey ? biologyRef : (getClassificationRef(_subjectKey) || biologyRef)}${syllabusForPrompt.substring(0, 15000)}
+${_subjectKey === "cambridge_biology_0610" || !_subjectKey ? biologyRef : (getClassificationRef(_subjectKey) || biologyRef)}${syllabusForPrompt.substring(0, 15000)}
 
 For EVERY question and sub-part return a JSON object with these fields:
 
@@ -3446,7 +3699,22 @@ Only include a parent (e.g. Q1(a)) if it has NO further sub-parts.
 - topic: string — main biology topic name e.g. "Photosynthesis", "Cell Structure"
 - subtopicId: string — syllabus subtopic number e.g. "6.1", "2.1", "17.2" — match exactly to the syllabus provided
 - subTopic: string — specific concept tested within that subtopic
-- currType: "Unit 1" or "Unit 2" — classify based on which Edexcel unit the topic belongs to (Topics 1–2 = Unit 1; Topics 3–6 = Unit 2). CRITICAL: if this question ID appears in the LOCKED CLASSIFICATIONS table above, you MUST use that value exactly.
+- currType: "Core" or "Extended" — CRITICAL: if this question ID appears in the LOCKED CLASSIFICATIONS table above, you MUST use that value exactly (including "Core/Extended"). Only classify yourself if not in the locked table.
+
+KEY CLASSIFICATION RULES (verified against 2026-2028 syllabus):
+• Classifying plants into ferns/dicotyledons/monocotyledons → "Extended" [1.3]
+• Urea formation, deamination → "Extended" [13.1]
+• Explaining wilting mechanism → "Extended" [8.3]
+• Explaining transpiration rate factors (HOW/WHY) → "Extended" [8.3]
+• Identifying atrioventricular/semilunar valves → "Extended" [9.2]
+• Explaining ventricle wall thickness → "Extended" [9.2]
+• Describing cardiac cycle / blood flow sequence → "Extended" [9.2]
+• Explaining WHY heart rate changes with exercise → "Extended" [9.2]
+• Selective breeding / artificial selection → "Core" subtopicId: "18.3" NOT "21.1"
+• Exercise + heart rate question → subtopicId: "9.2" NOT "11.1"
+• Eutrophication mechanism → "Extended" [20.3]
+• Balanced chemical photosynthesis equation → "Extended" [6.1]
+• Septum (oxygenated/deoxygenated blood separation) = Core; identifying AV valve = Extended → use "Core/Extended" if question asks both
 - syllabusStatus: "current" or "removed"
 - syllabusBadge: "✅ CURRENT" or "🟥 REMOVED"
 - classificationReason: string — one sentence citing the exact syllabus point
@@ -3454,42 +3722,17 @@ Only include a parent (e.g. Q1(a)) if it has NO further sub-parts.
 - difficulty: "Easy", "Medium", or "Hard"
 - timeEstimate: number — suggested minutes to answer
 
-- text: string — Sub-question instruction ONLY (no parent stem). Parent question: full stem/context.. Follow ALL these rules:
-
-  QUESTION NUMBER: Always start with the question reference e.g. "Q1(a)(i):" so it is clear which question this is.
-
-  PARENT STEM: If this is a sub-question, prepend the full parent context first. e.g. "Fig. 1.1 shows a diagram of a cell in salt solution. [Fig 1.1: cell A — large vacuole, thin cell wall; cell B — shrunken cytoplasm, cell wall intact] (a)(i): State the name of the process by which water left cell A."
-
-  MULTIPLE CHOICE: If the question has options A B C D, write them ALL out in full. e.g. "Which of the following is the correct equation for aerobic respiration?\nA  glucose + oxygen → carbon dioxide + water\nB  glucose → lactic acid\nC  glucose + water → carbon dioxide + alcohol\nD  carbon dioxide + water → glucose + oxygen"
-
-  FILL IN THE BLANKS: Reproduce the sentence with the blank spaces shown as .............. (dots). e.g. "Osmosis is the movement of .............. molecules from a region of .............. water potential to a region of .............. water potential."
-
-  COMPLETE THE TABLE / DIAGRAM: Describe the full table structure — headers and any given data — then indicate which cells are blank. e.g. "[Table: Column 1 = Component, Column 2 = Function | Row 1: Red blood cell | .............. | Row 2: .............. | Produces antibodies]"
-
-  CALCULATIONS: Include all given values, units, and the exact question instruction. e.g. "The mass of GM maize in 2000 was 80 million tonnes. In 2015 it was 325 million tonnes. Calculate the percentage increase. Give your answer to 2 significant figures. Show your working."
-
-  DIAGRAMS/GRAPHS: Describe every label, axis, value, and data point from the figure in square brackets so the question is fully self-contained. e.g. "[Fig 6.2: x-axis = pH 0–12; y-axis = area of jelly digested (mm²) 0–180; Enzyme L peaks at pH 2 with 160 mm²; Enzyme M peaks at pH 10 with 140 mm²]"
-
-  NEVER output only the sub-part wording alone without the full parent stem and question number.
-
-- stem: string — Parent question stem/context. Empty "" for top-level questions; full parent context for sub-questions.
+- text: string — The sub-question instruction ONLY (no parent stem, no marks, no classification). Plain text. For multiple choice include all options A/B/C/D. For fill-in-blanks reproduce with underscores. For tables use | pipe | format.
 
 - ms: string — ALL mark scheme points for this sub-part as a detailed paragraph. Include every accepted alternative answer, every mark allocation note, and every "allow / do not allow / ignore" instruction. Do not truncate.
 
-- model: string — Write a natural, well-structured model answer that a top student would write to earn FULL marks. Base it STRICTLY on the mark scheme and syllabus. Cover every DISTINCT marking point. For calculation or multi-step questions, include the full step-by-step working INSIDE this field (numbered steps, show all working). Respect the command word:
-  • Calculate → show working step by step
-  • Compare → state both similarities AND differences
-  • Define → give the precise biological meaning
-  • Describe → state the observable features/steps
-  • Determine → derive the answer from given information
-  • Evaluate → weigh evidence and make a judgement
-  • Explain → give reasons and link cause to effect
-  • Give / State → one clear concise answer per mark
-  • Identify / Name → the specific term only
-  • Outline → main points, no detail required
-  • Predict → state what will happen and why
-  • Suggest → apply knowledge to a new context
-Write as flowing prose (not bullet points). Use <b>bold</b> for key biological terms and scientific nomenclature.
+- model: string — Write a comprehensive model answer derived STRICTLY from the mark scheme and Cambridge 0610 syllabus. CRITICAL RULES:
+  1. IGNORE all quantity limiters — do NOT limit yourself to "two", "three", "any two from" etc. Include EVERY relevant biological point from the mark scheme AND every related point from the syllabus for this subtopic. A student reading this answer must see ALL possible marking points.
+  2. For each marking point, expand with the full biological explanation as the syllabus requires.
+  3. Use command-word conventions: Calculate → numbered working steps. Compare → explicit similarities AND differences. Explain → cause→mechanism→effect chain. Describe → sequential observable steps.
+  4. Bold key biological terms with <b>term</b>.
+  5. Write as flowing prose. No bullet points.
+  6. If the mark scheme has 6 possible points but the question says "state two", still write all 6 — the student uses this to revise every possible answer.
 
 - explanation: string — a thorough paragraph explaining the underlying biology concept being tested, written clearly for a student who got the question wrong.
 
@@ -3499,23 +3742,17 @@ Write as flowing prose (not bullet points). Use <b>bold</b> for key biological t
 
 - tutorNote: string — a tutor's personal note: what to emphasise when teaching this, common gaps in understanding, how it links to other topics.
 
-- commonMistakes: string — the most frequent errors students make on this specific question, written as a paragraph.
-
-- examTips: string — specific exam technique advice for this question type.
-
 Return ONLY a valid JSON array. No markdown, no code fences, no extra text before or after.`;
 
             try {
-                const providerLabel = PROVIDER_CONFIGS[getProvider()]?.label || 'AI';
-                document.getElementById('loading-text').innerText = `${providerLabel} reading all PDF pages — this may take up to 3 minutes for a full paper…`;
+                document.getElementById('loading-text').innerText = 'Gemini reading all PDF pages — this may take up to 2 minutes for a full paper…';
                 const payload = {
                     systemInstruction: { parts: [{ text: sysPrompt }] },
                     contents: [{ parts }],
-                    generationConfig: { responseMimeType: "application/json", temperature: 0.1 }
+                    generationConfig: { responseMimeType: "application/json", temperature: 0.1, maxOutputTokens: 65536 }
                 };
-                const pdfDataArrays = [uploadedFiles.exam.data, uploadedFiles.ms.data];
-                if (uploadedFiles.comments) pdfDataArrays.push(uploadedFiles.comments.data);
-                const data = await callAPI(payload, sysPrompt, pdfDataArrays, 180000);
+
+                const data = await callGeminiAPI(payload, 150000); // 150s for full PDF analysis
                 const anaRaw = data?.candidates?.[0]?.content?.parts?.[0]?.text || data?.candidates?.[0]?.content?.parts?.map?.(p=>p.text||'').join('') || '';
                 if (!anaRaw) { const th=data?.usageMetadata?.thoughtsTokenCount||0; throw new Error('Gemini returned empty analysis.'+(th>0?' (thinking mode issue — try again)':' Check API quota.')); }
                 function sanitiseJSON(raw) {
@@ -3539,7 +3776,7 @@ Return ONLY a valid JSON array. No markdown, no code fences, no extra text befor
                 const locked = window.extractedClassifications || {};
                 const lockMisses = [];
                 results = results.map(q => {
-                    let finalType = (q.currType === 'Unit 1' || q.currType === 'Unit 2') ? q.currType : 'Unit 1';
+                    let finalType = (q.currType === 'Core' || q.currType === 'Extended' || false /* Mixed removed */) ? q.currType : 'Core';
                     let matchedKey = null;
                     if (q.qID) {
                         // 1. exact match
@@ -3598,7 +3835,7 @@ Return ONLY a valid JSON array. No markdown, no code fences, no extra text befor
                     }
                 }
                 const overrideCount = results.filter((q,i) => {
-                    const orig = (q.currType === 'Unit 1' || q.currType === 'Unit 2') ? q.currType : 'Unit 1';
+                    const orig = (q.currType === 'Core' || q.currType === 'Extended') ? q.currType : 'Core';
                     return locked[q.qID] && locked[q.qID] !== orig;
                 }).length;
                 console.log('[Analysis] Applied locked classifications. Overrides:', overrideCount);
@@ -3620,11 +3857,12 @@ Return ONLY a valid JSON array. No markdown, no code fences, no extra text befor
                 renderSummary(results, currentPaperCode);
                 renderCards(results, currentPaperCode);
                 updateStudyGuide();
+                document.getElementById('download-btn')?.classList.remove('hidden');
 
-                const coreN = results.filter(q=>q.currType==='Unit 1').length;
-                const extN  = results.filter(q=>q.currType==='Unit 2').length;
-                const pureU1=results.filter(q=>q.currType==='Unit 1').length;const pureU2=results.filter(q=>q.currType==='Unit 2').length;
-                showModal('✅ Analysis Complete',`${results.length} questions:\n🔵 Unit 1: ${pureU1}\n🟠 Unit 2: ${pureU2}\n🟥 Removed: ${removed.length}\n\nTotal: ${pureU1+pureU2+removed.length}`);
+                const coreN = results.filter(q=>q.currType==='Unit 1'||q.currType==='Core').length;
+                const extN  = results.filter(q=>q.currType==='Unit 2'||q.currType==='Extended').length;
+                const pureCore=results.filter(q=>q.currType==='Core').length;const pureExt=results.filter(q=>q.currType==='Unit 2'||q.currType==='Extended').length;const pureMix=0;
+                showModal('✅ Analysis Complete',`${results.length} questions:\n🔵 Unit 1: ${pureCore}\n🟠 Unit 2: ${pureExt}${pureMix>0?'\n🔵🟠 Core/Extended: '+pureMix:''}\n🟥 Removed: ${removed.length}\n\nTotal: ${pureCore+pureExt+pureMix+removed.length}`);
 
             } catch (e) {
                 console.error('[v51] Analysis failed:', e);
@@ -3968,15 +4206,10 @@ Return ONLY a valid JSON array. No markdown, no code fences, no extra text befor
         }
 
         function saveField(qID, field, el) {
-            const clone = el.cloneNode(true);
-            clone.querySelectorAll('[data-img-wrapper]').forEach(w => {
-                const img = w.querySelector('img');
-                if (img) { const ni = document.createElement('img'); ni.src=img.src; ni.style.cssText=img.style.cssText; w.replaceWith(ni); }
-                else w.remove();
-            });
-            const q = currentResults.find(r => r.qID === qID);
-            if (q) q[field] = clone.innerHTML;
-            saveCurrentResults();
+            const q = currentResults.find(x => x.qID === qID);
+            if (!q) return;
+            q[field] = el.innerHTML;
+            persistCurrentResults();
         }
 
         function persistCurrentResults() {
@@ -4126,7 +4359,15 @@ Return ONLY a valid JSON array. No markdown, no code fences, no extra text befor
                     let tbl='<table style="border-collapse:collapse;font-size:11px;margin:6px 0;width:auto">';
                     drows.forEach((l,ri)=>{const cells=pc(l);tbl+='<tr>';cells.forEach(cell=>{const tag=ri===0?'th':'td';const sty=ri===0?'background:#1e293b;color:white;padding:4px 10px;font-weight:700;font-size:10px;border:1px solid #334155':'padding:4px 10px;border:1px solid #cbd5e1;font-size:11px;background:white';tbl+=`<${tag} style="${sty}">${cell||'&nbsp;'}</${tag}>`;});tbl+='</tr>';});
                     tbl+='</table>'; out+=tbl;
-                } else { out+=(line||'')+'<br>'; i++; }
+                } else {
+                    // Bold Q[n]([part]): prefix + dots → answer lines
+                    let boldLine = (line||'')
+                        .replace(/^(Q\d+(?:\([^)]+\))*):/, '<span style="font-weight:700;color:#1e293b">$1</span>:')
+                        .replace(/\.{6,}/g, '<span style="display:inline-block;min-width:120px;border-bottom:1.5px solid #94a3b8;margin:0 2px">&nbsp;</span>')
+                        .replace(/_{6,}/g,   '<span style="display:inline-block;min-width:120px;border-bottom:1.5px solid #94a3b8;margin:0 2px">&nbsp;</span>');
+                    out += boldLine + '<br>';
+                    i++;
+                }
             }
             return out.replace(/(<br>)+$/,'');
         }
@@ -4135,59 +4376,68 @@ Return ONLY a valid JSON array. No markdown, no code fences, no extra text befor
             if (!container) return;
             const syllabus = document.getElementById('syllabus-structure')?.value || '';
             container.innerHTML = data.map((p, index) => {
-                const isU1    = p.currType==='Unit 1';
-                const isU2     = p.currType==='Unit 2';
-                const badgeClass     = isU1?'badge-unit1':'badge-unit2';
+                const isCore    = p.currType==='Core';
+                const isExt     = p.currType==='Extended';
+                const isMixed   = false;
+                const badgeClass     = isCore?'badge-core':'badge-extended';
                 const diff = p.difficulty||'Medium';
                 const diffClass = diff==='Easy'?'bg-green-600 text-white border-green-700':diff==='Hard'?'bg-red-600 text-white border-red-700':'bg-amber-500 text-white border-amber-600';
                 const isRemoved       = p.syllabusStatus==='removed';
                 const statusBadgeClass = isRemoved?'badge-removed':'badge-current';
                 const statusBadge      = isRemoved?'🟥 REMOVED':'✅ CURRENT';
-                const panelClass       = isU2?'unit2-panel':false?'unit1-panel':'unit1-panel';
-                const studyIcon = false?'🔵🟠':isU1?'🔵':'🟠';
-                const studyNote = isU1?'🔵 Unit 1':'🟠 Unit 2';
+                const panelClass       = isExt?'extended-panel':'core-panel';
+                const studyIcon = isCore?'🔵':'🟠';
+                const studyNote = isCore?'🔵 Core only':'🟠 Extended only';
                 const highlightedText = p.text||'';
-                // highlighting removed — kept clean
+                // Pull parent stem from extraction console text
+                let parentStemHtml = '';
+                try {
+                    const qt = document.getElementById('question-text');
+                    const extTxt = qt ? qt.value : '';
+                    if (extTxt) {
+                        const parentMatch = extTxt.match(new RegExp('(?:^|\n)(Q' + (p.qID.match(/^(\d+)/)||['','1'])[1] + ':\\s*[^\n]+)', ''));
+                        if (parentMatch) {
+                            const stemLine = parentMatch[1]
+                                .replace(/^Q\d+:\s*/, '')
+                                .replace(/\[\d+\s*marks?\]/gi, '')
+                                .replace(/\[CORE\/EXTENDED\]/g, '')
+                                .replace(/\[CORE\]/g, '').replace(/\[EXTENDED\]/g, '')
+                                .replace(/\[(?:Topic )?[\d]+\.[\d]+[^\]]*\]/g, '')
+                                .replace(/\(no shared stem\)/g, '').trim();
+                            if (stemLine) parentStemHtml = '<div style="font-size:11px;color:#64748b;border-bottom:0.5px solid #e2e8f0;margin-bottom:6px;padding-bottom:5px;font-style:italic">' + stemLine + '</div>';
+                        }
+                    }
+                } catch(e) {}
                 const reasonNote = p.classificationReason ? `<span class="text-[9px] text-slate-400 ml-2" title="${p.classificationReason}">ℹ️</span>` : '';
                 return `
                 <div class="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm mb-6 ${panelClass} ${isRemoved?'border-2 border-rose-200':''}"
                      data-question-id="${p.qID}"
                      data-question-type="${p.currType}"
                      data-question-status="${p.syllabusStatus||'current'}"
-                     data-question-difficulty="${p.difficulty||'Medium'}"
-                     data-bio-only="${(p.subtopicId && BIOLOGY_ONLY_SUBTOPICS.has(p.subtopicId)) ? 'true' : 'false'}">
+                     data-question-difficulty="${p.difficulty||'Medium'}">
                     <div class="flex justify-between items-start mb-4">
                         <div class="analysis-header flex-1">
-                            <h3 class="text-sm font-black text-slate-800" contenteditable="true" onblur="(function(el){var q=currentResults.find(function(x){return x.qID==='${p.qID}'});if(q)q.subTopic=el.innerText;persistCurrentResults();})(this)" style="outline:none;cursor:text;border-bottom:1px dashed transparent" onfocus="this.style.borderBottomColor='#6366f1'" title="Click to edit">
+                            <h3 class="text-sm font-black text-slate-800" contenteditable="true" onblur="(function(el){var q=currentResults.find(function(x){return x.qID==='${p.qID}'});if(q)q.subTopic=el.innerText.replace(/.*—\s*/,'');persistCurrentResults();})(this)" style="outline:none;cursor:text;border-bottom:1px dashed transparent" onfocus="this.style.borderBottomColor='#6366f1'" title="Click to edit">
                                 ${studyIcon} ${currentPaperCode ? currentPaperCode+'/' : ''}Q${p.qID} — ${p.subTopic||p.topic||'General'}
                             </h3>
                             <div class="flex gap-1 mt-1 flex-wrap items-center">
                                 ${p.subtopicId ? (() => {
                                     const tNum = parseInt(p.subtopicId.split('.')[0]);
                                     const tName = TOPIC_NAMES[tNum] || p.topic || '';
-                                    // Use canonical syllabus name — not Gemini's free-text subTopic
-                                    const _sm = EDEXCEL_BIO_4XBI1_SYLLABUS;
-                                    const syllEntry = _sm[p.subtopicId];
+                                    const syllEntry = IGCSE_BIOLOGY_SYLLABUS_2026[p.subtopicId];
                                     const canonicalName = syllEntry ? syllEntry.name : (p.subTopic || p.topic || '');
-                                    const isModularOnly = syllEntry?.modularOnly === true || (p.subtopicId && BIOLOGY_ONLY_SUBTOPICS.has(p.subtopicId));
-                                    // Detect mixed subtopic: has both core and supplement points
-                                    return `<span contenteditable="true" onblur="(function(el,qid){const q=currentResults.find(x=>x.qID===qid);if(q){const txt=el.innerText.trim();const m=txt.match(/(\\d+)/);if(m){const n=parseInt(m[1]);q.topic=TOPIC_NAMES[n]||txt;q.subtopicId=(q.subtopicId||qid).replace(/^\\d+/,String(n));}persistCurrentResults();renderSummary(currentResults,currentPaperCode);}})(this,'${p.qID}')" title="Click to edit topic number" class="inline-block bg-indigo-100 text-indigo-700 font-bold px-2 py-0.5 rounded-l text-[9px] cursor-text hover:bg-indigo-200 focus:outline-none focus:ring-1 focus:ring-indigo-400">Topic ${tNum}. ${tName}</span><span contenteditable="true" onblur="(function(el,qid){const q=currentResults.find(x=>x.qID===qid);if(q){const txt=el.innerText.replace(/^Sub-topic:\\s*/,'').trim();const m=txt.match(/^(\\d+\\.\\d+)\\s*(.*)/);if(m){q.subtopicId=m[1];q.subTopic=m[2]||q.subTopic;}else{q.subTopic=txt;}persistCurrentResults();renderSummary(currentResults,currentPaperCode);}})(this,'${p.qID}')" title="Click to edit subtopic (e.g. 2.1 Cell structure)" class="inline-block bg-slate-200 text-slate-600 px-2 py-0.5 rounded-r text-[9px] cursor-text hover:bg-slate-300 focus:outline-none focus:ring-1 focus:ring-slate-400">Sub-topic: ${p.subtopicId} ${canonicalName}${isModularOnly?' <span style="background:#ede9fe;color:#7c3aed;font-size:8px;font-weight:700;padding:0 3px;border-radius:3px;vertical-align:middle\" title=\"Biology-only — not in Science Double Award\">[B]</span>':''}</span>`;
-                                })() : `<span class="inline-block bg-slate-200 text-slate-600 px-2 py-0.5 rounded text-[9px]">${p.topic||''}</span>`}
+                                    return `<span contenteditable="true" onblur="(function(el,qid){const q=currentResults.find(x=>x.qID===qid);if(q){const txt=el.innerText.trim();const m=txt.match(/(\\d+)/);if(m){const n=parseInt(m[1]);q.topic=TOPIC_NAMES[n]||txt;q.subtopicId=(q.subtopicId||qid).replace(/^\\d+/,String(n));}persistCurrentResults();renderSummary(currentResults,currentPaperCode);}})(this,'${p.qID}')" title="Click to edit topic number" class="inline-block bg-indigo-100 text-indigo-700 font-bold px-2 py-0.5 rounded-l text-[9px] cursor-text hover:bg-indigo-200 focus:outline-none focus:ring-1 focus:ring-indigo-400">Topic ${tNum}. ${tName}</span><span contenteditable="true" onblur="(function(el,qid){const q=currentResults.find(x=>x.qID===qid);if(q){const txt=el.innerText.replace(/^Sub-topic:\\s*/,'').trim();const m=txt.match(/^(\\d+\\.\\d+)\\s*(.*)/);if(m){q.subtopicId=m[1];q.subTopic=m[2]||q.subTopic;}else{q.subTopic=txt;}persistCurrentResults();renderSummary(currentResults,currentPaperCode);}})(this,'${p.qID}')" title="Click to edit subtopic (e.g. 21.1 Biotechnology)" class="inline-block bg-slate-200 text-slate-600 px-2 py-0.5 rounded-r text-[9px] cursor-text hover:bg-slate-300 focus:outline-none focus:ring-1 focus:ring-slate-400">Sub-topic: ${p.subtopicId} ${canonicalName}</span>`;
+                                })() : `<span contenteditable="true" onblur="(function(el,qid){const q=currentResults.find(x=>x.qID===qid);if(q){q.topic=el.innerText.trim();persistCurrentResults();renderSummary(currentResults,currentPaperCode);}})(this,'${p.qID}')" title="Click to edit topic" class="inline-block bg-slate-200 text-slate-600 px-2 py-0.5 rounded text-[9px] cursor-text hover:bg-slate-300 focus:outline-none focus:ring-1 focus:ring-slate-400">${p.topic||''}</span>`}
                             </div>
-                            <div class="text-[9px] text-slate-400 mt-0.5 font-mono">${currentPaperCode ? currentPaperCode+'/' : ''}Q${p.qID} [<span contenteditable="true" onblur="(function(el,qid){const q=currentResults.find(x=>x.qID===qid);if(q){const n=parseInt(el.innerText);if(!isNaN(n)){q.marks=n;persistCurrentResults();el.innerText=String(n);}else{el.innerText=String(q.marks||'?');}}})(this,'${p.qID}')" title="Click to edit marks" class="cursor-text hover:text-slate-600 focus:outline-none focus:underline">${p.marks||'?'}</span> marks] [<span class="ref-type-label">${p.currType==='Unit 1'?'UNIT1':'UNIT2'}</span>]</div>
-                            <span class="text-[10px] ${false?'text-purple-600':isU1?'text-blue-600':'text-orange-600'} font-bold study-note-span">${studyNote}${reasonNote}</span>
+                            <div class="text-[9px] text-slate-400 mt-0.5 font-mono">${currentPaperCode ? currentPaperCode+'/' : ''}Q${p.qID} [<span contenteditable="true" onblur="(function(el,qid){const q=currentResults.find(x=>x.qID===qid);if(q){const n=parseInt(el.innerText);if(!isNaN(n)){q.marks=n;persistCurrentResults();el.innerText=String(n);}else{el.innerText=String(q.marks||'?');}}})(this,'${p.qID}')" title="Click to edit marks" class="cursor-text hover:text-slate-600 focus:outline-none focus:underline">${p.marks||'?'}</span> marks] [<span class="ref-type-label">${p.currType==='Core/Extended'?'CORE/EXTENDED':p.currType==='Core'?'CORE':'EXTENDED'}</span>]</div>
+                            <span class="text-[10px] ${isCore?'text-blue-600':'text-orange-600'} font-bold study-note-span">${studyNote}${reasonNote}</span>
                         </div>
                         <div class="flex flex-col gap-1.5 items-end ml-4"><div class="flex gap-1 mb-1"><button onclick="toggleCard('${p.qID}')" class="card-collapse-btn text-[10px] px-1.5 py-0.5 bg-slate-100 hover:bg-slate-200 rounded border text-slate-500" title="Collapse">▼</button><button onclick="removeCard('${p.qID}')" class="text-[10px] px-1.5 py-0.5 bg-rose-50 hover:bg-rose-100 rounded border border-rose-200 text-rose-400" title="Remove card">✕</button></div>
                             <select onchange="setQuestionType('${p.qID}',this.value)" data-sqid="${p.qID}"
-                                class="text-[10px] font-bold px-2 py-0.5 rounded border cursor-pointer focus:outline-none ${p.currType==='Unit 1'?'bg-blue-600 text-white border-blue-700':p.currType==='Unit 2'?'bg-orange-500 text-white border-orange-600':'bg-purple-600 text-white border-purple-700'}"
+                                class="text-[10px] font-bold px-2 py-0.5 rounded border cursor-pointer focus:outline-none ${p.currType==='Core'?'bg-blue-600 text-white border-blue-700':p.currType==='Extended'?'bg-orange-500 text-white border-orange-600':'bg-purple-600 text-white border-purple-700'}"
                                 style="appearance:auto">
-                                <option value="Unit 1" ${p.currType==='Unit 1'?'selected':''} style="background:#2563eb;color:#fff">🔵 Unit 1</option>
-                                <option value="Unit 2" ${p.currType==='Unit 2'?'selected':''} style="background:#f97316;color:#fff">🟠 Unit 2</option>
-                            </select>
-                            <div class="flex gap-1.5 items-center">
-                                <select onchange="setQuestionStatus('${p.qID}',this.value)"
-                                    class="text-[10px] font-bold px-1.5 py-0.5 rounded border cursor-pointer focus:outline-none ${isRemoved?'bg-rose-600 text-white border-rose-700':'bg-emerald-600 text-white border-emerald-700'}"
-                                    style="appearance:auto">
+                                <option value="Core" ${p.currType==='Core'?'selected':''} style="background:#2563eb;color:#fff">🔵 Core</option>
+                                <option value="Extended" ${p.currType==='Extended'?'selected':''} style="background:#f97316;color:#fff">🟠 Extended</option>
                                     <option value="current" ${!isRemoved?'selected':''} style="background:#059669;color:#fff">✅ Current</option>
                                     <option value="removed" ${isRemoved?'selected':''} style="background:#e11d48;color:#fff">🟥 Removed</option>
                                 </select>
@@ -4212,17 +4462,17 @@ Return ONLY a valid JSON array. No markdown, no code fences, no extra text befor
                         <div contenteditable="true" data-qid="${p.qID}" data-field="text"
                             oninput="saveField('${p.qID}','text',this)"
                             class="text-sm text-slate-700 p-4 bg-slate-50 rounded-xl border font-mono leading-relaxed focus:outline-none focus:ring-2 focus:ring-indigo-300"
-                            style="min-height:48px;white-space:normal">${renderQuestionText('<b>Q' + p.qID + ':</b> ' + highlightedText)}</div>
+                            style="min-height:48px;white-space:normal">${parentStemHtml}${renderQText(highlightedText, p.qID)}</div>
                     </div>
 
-                    <div class="grid grid-cols-2 gap-4">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div>
                             <h4 class="text-xs font-semibold text-slate-400 uppercase mb-2">Mark Scheme:
                                 <button onclick="addImageToField('${p.qID}','ms',this)" class="ml-2 text-[9px] text-slate-400 hover:text-slate-600 border border-slate-200 px-1.5 py-0.5 rounded">📷 Add Image(s)</button>
                             </h4>
                             <div contenteditable="true" data-qid="${p.qID}" data-field="ms"
                                 oninput="saveField('${p.qID}','ms',this)"
-                                class="text-xs text-slate-600 p-3 bg-slate-50 rounded-lg border focus:outline-none focus:ring-2 focus:ring-slate-300" style="line-height:1.7;min-height:40px;white-space:pre-wrap">${formatMS(p.ms)}</div>
+                                class="text-xs text-slate-600 p-3 bg-slate-50 rounded-lg border focus:outline-none focus:ring-2 focus:ring-slate-300" style="line-height:1.65;min-height:40px">${renderMSStructured(p.ms)}</div>
                         </div>
                         <div>
                             <h4 class="text-xs font-semibold text-slate-400 uppercase mb-2">Model Answer:
@@ -4230,7 +4480,7 @@ Return ONLY a valid JSON array. No markdown, no code fences, no extra text befor
                             </h4>
                             <div contenteditable="true" data-qid="${p.qID}" data-field="model"
                                 oninput="saveField('${p.qID}','model',this)"
-                                class="bg-indigo-50 p-3 rounded-lg text-xs border border-indigo-100 leading-relaxed focus:outline-none focus:ring-2 focus:ring-indigo-300" style="min-height:40px;white-space:pre-wrap">${(p.model||'').replace(/\*\*(.*?)\*\*/g,'<b>$1</b>').replace(/\*/g,'').replace(/\n/g,'<br>')}</div>
+                                class="bg-indigo-50 p-3 rounded-lg text-xs border border-indigo-100 leading-relaxed focus:outline-none focus:ring-2 focus:ring-indigo-300" style="min-height:40px">${renderModelAnswer(p.model, p.marks)}</div>
                         </div>
                     </div>
 
@@ -4275,13 +4525,7 @@ Return ONLY a valid JSON array. No markdown, no code fences, no extra text befor
                             class="text-xs text-slate-700 leading-relaxed focus:outline-none focus:ring-2 focus:ring-slate-400 rounded p-1" style="min-height:32px;white-space:pre-wrap">${(p.teacherNotes||'').replace(/\n/g,'<br>')}</div>
                     </div>
 
-                    ${p.tutorNote&&p.tutorNote.trim()?`
-                    <div class="mt-4 p-3 rounded-lg border border-violet-200 bg-violet-50">
-                        <h4 class="text-xs font-semibold text-violet-700 uppercase mb-2">🎓 Tutor Note:</h4>
-                        <div contenteditable="true" data-qid="${p.qID}" data-field="tutorNote"
-                            oninput="saveField('${p.qID}','tutorNote',this)"
-                            class="text-xs text-violet-900 leading-relaxed focus:outline-none focus:ring-2 focus:ring-violet-300 rounded p-1" style="min-height:32px;white-space:pre-wrap">${p.tutorNote.replace(/\n/g,'<br>')}</div>
-                    </div>`:''}
+                    
 
                     <div class="mt-3 flex justify-between items-center">
                         <span class="text-[10px] text-slate-400">Q${index+1} of ${data.length}</span>
@@ -4306,7 +4550,6 @@ Return ONLY a valid JSON array. No markdown, no code fences, no extra text befor
 
         function downloadTextPDF(sortMode) {
             if (!sortMode) sortMode = summarySortMode || 'exam';
-            if (!currentResults.length) { showModal('No Results', 'Run an analysis first — then use this button to download the plain-text PDF.'); return; }
             try {
                 const { jsPDF } = window.jspdf;
                 const pdf = new jsPDF('p','mm','a4');
@@ -4314,11 +4557,6 @@ Return ONLY a valid JSON array. No markdown, no code fences, no extra text befor
                 let yPos = 20;
                 const margin = 20, pageWidth = pdf.internal.pageSize.getWidth();
                 const contentWidth = pageWidth - margin*2;
-                const unitFilter = getReportUnitFilter();
-                // Respect active filters + unit filter
-                const filtered = applyUnitFilter(getFilteredResults(), unitFilter);
-                const sourceResults = filtered.length ? filtered : applyUnitFilter(currentResults, unitFilter);
-                const isFiltered = sourceResults.length !== currentResults.length;
                 function stripHTML(s) {
                     if (!s) return '';
                     // Remove size-buttons and delete overlays from image wrappers before stripping
@@ -4334,11 +4572,12 @@ Return ONLY a valid JSON array. No markdown, no code fences, no extra text befor
                     text = cleanForPDF(text);
                     if (!text.trim()) return;
                     pdf.setFontSize(size); pdf.setFont('helvetica', bold?'bold':'normal');
-                    const leading = size * 0.44;
+                    const leading = size * 0.44; // mm per pt line
+                    // Split on real newlines first, then wrap each paragraph
                     const paragraphs = text.split('\n');
                     paragraphs.forEach((para, pi) => {
                         const trimmed = para.trim();
-                        if (!trimmed) { yPos += leading * 0.5; return; }
+                        if (!trimmed) { yPos += leading * 0.5; return; } // blank line = small gap
                         const lines = pdf.splitTextToSize(trimmed, contentWidth);
                         lines.forEach(line => {
                             if (yPos > 280) { pdf.addPage(); yPos = 20; }
@@ -4346,18 +4585,23 @@ Return ONLY a valid JSON array. No markdown, no code fences, no extra text befor
                             yPos += leading;
                         });
                     });
-                    yPos += 1.5;
+                    yPos += 1.5; // gap after block
                 }
+                // Apply unit/tier filter
+                const _unitFilter = getReportUnitFilter ? getReportUnitFilter() : 'all';
+                const sourceResults = (typeof applyUnitFilter === 'function')
+                    ? applyUnitFilter(currentResults, _unitFilter)
+                    : [...currentResults];
                 addText('IGCSE Analysis Report', 18, true);
                 addText(`Paper: ${subject}`, 12);
                 addText(`Generated: ${new Date().toLocaleString()}`, 10);
-                addText(`Edexcel IGCSE Biology 4XBI1 — Edexcel Processor v1.0 · ${sortMode==='topic'?'Topic Order':'Exam Order'}${isFiltered?' · Filtered: '+sourceResults.length+'/'+currentResults.length+' questions':''}`, 9);
+                addText(`Cambridge IGCSE Biology 0610 (2026-2028) — IGCSE Processor v51.0`, 9);
                 yPos+=5;
-                const coreN = sourceResults.filter(q=>q.currType==='Unit 1').length;
-                const extN  = sourceResults.filter(q=>q.currType==='Unit 2').length;
-                const remN  = sourceResults.filter(q=>q.syllabusStatus==='removed').length;
+                const coreN = currentResults.filter(q=>q.currType==='Core').length;
+                const extN  = currentResults.filter(q=>q.currType==='Extended'||q.currType==='Core/Extended').length;
+                const remN  = currentResults.filter(q=>q.syllabusStatus==='removed').length;
                 const totalM = sourceResults.reduce((s,q)=>s+(parseInt(q.marks)||0),0);
-                addText(`Unit 1: ${coreN}  |  Unit 2: ${extN}  |  Removed: ${remN}  |  Total Marks: ${totalM}`, 12, true);
+                addText(`Core: ${coreN}  |  Extended: ${extN}  |  Removed: ${remN}  |  Total Marks: ${totalM}`, 12, true);
                 yPos+=6;
 
                 // ── Summary by Topic ──────────────────────────────────────────
@@ -4373,16 +4617,17 @@ Return ONLY a valid JSON array. No markdown, no code fences, no extra text befor
                     if (!pdfTopicStats[key]) { pdfTopicStats[key]={ id:q.subtopicId||'', topic:q.topic||'Other', qs:[], marks:0, cN:0, eN:0 }; pdfOrder.push(key); }
                     pdfTopicStats[key].qs.push(q.qID);
                     pdfTopicStats[key].marks += parseInt(q.marks)||0;
-                    if (q.currType==='Unit 1') pdfTopicStats[key].cN++; else pdfTopicStats[key].eN++;
+                    if (q.currType==='Core') pdfTopicStats[key].cN++; else pdfTopicStats[key].eN++;
                 });
                 const pdfPre = currentPaperCode ? currentPaperCode+'/' : '';
+                // Keep exam chronological order — pdfOrder is built by forEach so already in sequence
                 pdfOrder.forEach(key => {
                     if (yPos>275) { pdf.addPage(); yPos=20; }
                     const ts = pdfTopicStats[key];
                     const tn3 = ts.id ? parseInt(ts.id.split('.')[0]) : null;
                     const tname3 = tn3 ? (TOPIC_NAMES[tn3] || ts.topic) : ts.topic;
                     const topicHeader = ts.id ? `Topic ${tn3}. ${tname3}  |  Sub-topic: ${ts.id} ${ts.topic}` : ts.topic;
-                    const typeStr = ts.eN>ts.cN ? '[UNIT2]' : '[UNIT1]';
+                    const typeStr = ts.eN>ts.cN ? '[EXTENDED]' : '[CORE]';
                     const typeCol = ts.eN>ts.cN ? [234,88,12] : [2,132,199];
                     pdf.setTextColor(...typeCol);
                     addText(`${topicHeader}   ${typeStr}   ${ts.marks} marks`, 9, true);
@@ -4393,7 +4638,6 @@ Return ONLY a valid JSON array. No markdown, no code fences, no extra text befor
                 });
                 yPos+=6;
 
-                // ── Sort questions by sortMode ────────────────────────────
                 let orderedQ = [...sourceResults];
                 if (sortMode === 'topic') {
                     orderedQ.sort((a, b) => {
@@ -4405,8 +4649,8 @@ Return ONLY a valid JSON array. No markdown, no code fences, no extra text befor
                         return compareQIDs(a.qID, b.qID);
                     });
                 }
-                const sortLabel = sortMode === 'topic' ? 'Topic Order' : 'Exam Order';
-                addText(`Questions Detail — ${sortLabel}`, 13, true); yPos+=2;
+                const sortLabel_pdf = sortMode === 'topic' ? 'Topic Order' : 'Exam Order';
+                addText(`Questions Detail — ${sortLabel_pdf}`, 13, true); yPos+=2;
                 orderedQ.forEach((q, i) => {
 
                     // ── Per-question divider + header ────────────────────────
@@ -4461,28 +4705,22 @@ Return ONLY a valid JSON array. No markdown, no code fences, no extra text befor
                     addSection('Common Mistakes:',    q.commonMistakes, [185,28,28],  [185,28,28]);
                     addSection('Exam Tips:',          q.examTips,       [5,150,105],  [5,150,105]);
                     addSection('Feedback:',           q.feedback,       [100,116,139],[100,116,139]);
-                    addSection('Tutor Note:',         q.tutorNote,      [109,40,217], [109,40,217]);
-
+                    
                     pdf.setTextColor(0, 0, 0);
                 });;
-                // Open PDF in new tab so browser shows native Save dialog
-                const safeName = buildReportFilename(currentPaperCode || subject || 'Unknown', 'Analysis_Report', sortMode, unitFilter);
-                const pdfBlob = pdf.output('blob');
+                                const safeName = buildReportFilename(currentPaperCode || subject || 'Unknown', 'Analysis_Report', sortMode, _unitFilter);
+                                const pdfBlob = pdf.output('blob');
                 const blobURL = URL.createObjectURL(pdfBlob);
                 const win = window.open(blobURL, '_blank');
                 if (win) {
                     win.addEventListener('load', () => URL.revokeObjectURL(blobURL), { once: true });
                 } else {
-                    // Popup blocked — fall back to direct download link
                     const a = document.createElement('a');
-                    a.href = blobURL;
-                    a.download = `${safeName}.pdf`;
-                    document.body.appendChild(a);
-                    a.click();
+                    a.href = blobURL; a.download = `${safeName}.pdf`;
+                    document.body.appendChild(a); a.click();
                     setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(blobURL); }, 1000);
                     showModal('PDF Ready', `Saving as ${safeName}.pdf`);
-                }
-            } catch(e) { showModal('Error', 'PDF failed: '+e.message); }
+                }           } catch(e) { showModal('Error', 'PDF failed: '+e.message); }
         }
 
         function checkInputs() {
@@ -4507,7 +4745,8 @@ Return ONLY a valid JSON array. No markdown, no code fences, no extra text befor
             currentPaperCode = '';
             currentSubject = null;
             syllabusParser.isLoaded = false;
-            // unit1Topics and unit2Topics cleared by loadHardcodedSyllabus
+            syllabusParser.coreTopics.clear();
+            syllabusParser.supplementTopics.clear();
             syllabusParser.coreTopicStrings = [];
             syllabusParser.supplementTopicStrings = [];
             syllabusParser.coreCount = 0;
@@ -4519,6 +4758,7 @@ Return ONLY a valid JSON array. No markdown, no code fences, no extra text befor
             renderConsole('');
             document.getElementById('syllabus-warnings').innerHTML = '';
             document.getElementById('results-area')?.classList.add('hidden');
+            document.getElementById('download-btn')?.classList.add('hidden');
             document.getElementById('exam-pdf').value = '';
             document.getElementById('ms-pdf').value = '';
             document.getElementById('syllabus-pdf').value = '';
@@ -4541,49 +4781,24 @@ Return ONLY a valid JSON array. No markdown, no code fences, no extra text befor
             checkInputs();
         }
 
-        function loadHardcodedSyllabus() {
-            const syllabus = EDEXCEL_BIO_4XBI1_SYLLABUS;
-            const parser = syllabusParser;
-            parser.unit1Topics.clear();
-            parser.unit2Topics.clear();
-            parser.currentSyllabus = 'bio';
-            Object.entries(syllabus).forEach(([id, sub]) => {
-                (sub.unit === 1 ? parser.unit1Topics : parser.unit2Topics).set(id, { name: sub.name, topic: sub.topic, topicName: sub.topicName, points: sub.points || sub.topics });
-            });
-            parser.isLoaded = true;
-            const u1 = parser.unit1Topics.size, u2 = parser.unit2Topics.size;
-            console.log('[Edexcel] Syllabus loaded:', { subject: parser.currentSyllabus, unit1: u1, unit2: u2 });
-            const parseBadge = document.getElementById('syllabus-parse-badge');
-            if (parseBadge) {
-                parseBadge.textContent = '📚 Unit 1: ' + u1 + ' topics | Unit 2: ' + u2 + ' topics';
-                parseBadge.className = 'text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700';
-            }
-            const syllabusArea = document.getElementById('syllabus-structure');
-            if (syllabusArea) syllabusArea.value = parser.getStructuredForPrompt();
-            const statusBanner = document.getElementById('syllabus-status');
-            if (statusBanner) statusBanner.classList.add('hidden');
-            const parseStatus = document.getElementById('syllabus-parse-status');
-            if (parseStatus) parseStatus.textContent = '✅ Unit 1: ' + u1 + ' | Unit 2: ' + u2 + ' topics (Edexcel)';
-            setExtractionStatus('ready', 'SYLLABUS READY — Upload Exam PDF to extract questions');
-            checkInputs();
-        }
-
         window.onload = () => {
+            // Use requestAnimationFrame to ensure all DOM elements are painted
+            // before manipulating them (avoids hidden-banner timing bugs on slow browsers)
             requestAnimationFrame(() => {
-                // Restore provider selection first
-                const savedProvider = localStorage.getItem('edexcel_provider') || 'gemini';
-                const providerEl = document.getElementById('api-provider');
-                if (providerEl) { providerEl.value = savedProvider; onProviderChange(); }
-                else {
-                    const saved = localStorage.getItem('igcse_key');
-                    if (saved) { document.getElementById('api-key').value = saved; validateApiKeyInput(); checkInputs(); }
-                }
+                const saved = localStorage.getItem('igcse_key');
+                if (saved) { document.getElementById('api-key').value = saved; validateApiKeyInput(); checkInputs(); }
                 if (localStorage.getItem('darkMode') === 'true') {
                     document.body.classList.add('dark-mode');
                     const btn = document.querySelector('button[onclick="toggleDarkMode()"]');
                     if (btn) btn.innerHTML = '☀️ Light';
                 }
+                // v51: Auto-load hardcoded syllabus — always available, no PDF needed
                 loadHardcodedSyllabus();
+                // Warn in console about supplement-only subtopics for developer visibility
+                if (syllabusParser.supplementOnlySubtopics?.size) {
+                    console.info(`[v51] ${syllabusParser.supplementOnlySubtopics.size} supplement-only subtopics: ${[...syllabusParser.supplementOnlySubtopics].join(', ')}`);
+                }
+                // Restore last session if available
                 restoreCurrentResults();
                 updateOnlineStatus();
             });
@@ -4610,40 +4825,40 @@ Return ONLY a valid JSON array. No markdown, no code fences, no extra text befor
                 const lines = extractedText.split('\n').filter(l => l.trim());
                 const tbody = document.getElementById('review-table-body');
                 const subjectBadge = document.getElementById('review-subject-badge');
-                if (subjectBadge) subjectBadge.textContent = currentSubject || 'Edexcel IGCSE';
+                if (subjectBadge) subjectBadge.textContent = currentSubject || 'Biology 0610';
 
-                let u1N = 0, u2N = 0;
+                let coreN = 0, extN = 0, mixedN = 0;
                 const rows = lines.map((line, i) => {
-                    // Parse Edexcel format: Q...: text [X marks] [UNIT1 or UNIT2] [Topic N.N Name]
-                    let mFull = line.match(/^(Q[^:]+):\s*(.*?)\[(\d+)\s*marks?\]\s*\[(UNIT1|UNIT2)\](\s*\[B\])?\s*(?:\[Topic\s+([^\]]+)\])?/i);
+                    // Parse: Q...: text [X marks] [TYPE] [Topic N.N Name]
+                    let mFull = line.match(/^(Q\d+(?:\([^)]+\))+):\s*(.*?)\[(\d+)\s*marks?\]\s*\[(CORE\/EXTENDED|CORE|EXTENDED)\]\s*(?:\[Topic\s+([^\]]+)\])?/i);
                     if (!mFull) {
-                        // Try without explicit marks tag
-                        const mNoMarks = line.match(/^(Q[^:]+):\s*(.*?)\s*\[(UNIT1|UNIT2)\](\s*\[B\])?\s*(?:\[Topic\s+([^\]]+)\])?/i);
+                        const mNoMarks = line.match(/^(Q\d+(?:\([^)]+\))+):\s*(.*?)\s*\[(CORE\/EXTENDED|CORE|EXTENDED)\]\s*(?:\[Topic\s+([^\]]+)\])?/i);
                         if (mNoMarks) {
                             const mMarks = line.match(/\[(\d+)\s*marks?\]|\((\d+)\s*marks?\)|\s(\d+)\s+marks?/i);
                             const foundMarks = mMarks ? (mMarks[1]||mMarks[2]||mMarks[3]) : '?';
-                            mFull = [mNoMarks[0], mNoMarks[1], mNoMarks[2], foundMarks, mNoMarks[3], mNoMarks[4], mNoMarks[5]];
+                            mFull = [mNoMarks[0], mNoMarks[1], mNoMarks[2], foundMarks, mNoMarks[3], mNoMarks[4]];
                         }
                     }
                     if (!mFull) return '';
-                    const [, qid, qtext, marks, rawType, bTag, topic] = mFull;
-                    const type = rawType.toUpperCase() === 'UNIT1' ? 'Unit 1' : 'Unit 2';
-                    const isBioOnly = !!(bTag && bTag.includes('B'));
-                    if (type === 'Unit 1') u1N++; else u2N++;
+                    const [, qid, qtext, marks, rawType, topic] = mFull;
+                    let type = rawType.toUpperCase() === 'CORE/EXTENDED' ? 'Core/Extended' : rawType.toUpperCase() === 'CORE' ? 'Core' : 'Extended';
+                    // Trust the extracted [CORE/EXTENDED] type — no syllabus override
+                    if (type === 'Core') coreN++;
+                    if (type === 'Extended' || type === 'Core/Extended') extN++;
+                    // mixedN removed
                     const preview = qtext.length > 80 ? qtext.substring(0, 80) + '\u2026' : qtext;
-                    const typeSel = ['Unit 1', 'Unit 2'].map(t =>
-                        `<option value="${t}" ${t===type?'selected':''}>${t==='Unit 1'?'🔵 Unit 1':'🟠 Unit 2'}</option>`
+                    const typeSel = ['Core','Extended'].map(t =>
+                        `<option value="${t}" ${t===type?'selected':''}>${t==='Core'?'\uD83D\uDD35 Core':'\uD83D\uDFE0 Extended'}</option>`
                     ).join('');
-                    const rowBg = type==='Unit 1' ? '#eff6ff' : '#fff7ed';
-                    const bioTag = isBioOnly ? '<span class="inline-block bg-purple-100 text-purple-700 font-bold px-1 py-0.5 rounded text-[9px] ml-1" title="Biology-only">[B]</span>' : '';
+                    const rowBg = type==='Core'?'#eff6ff':'#fff7ed';
                     return `<tr style="background:${rowBg};border-bottom:1px solid #f1f5f9" data-review-row="${i}">
                         <td class="px-3 py-2 font-mono font-bold text-slate-700">${qid}</td>
                         <td class="px-3 py-2 text-slate-600">${preview}</td>
-                        <td class="px-3 py-2 text-slate-500 text-[10px]">${topic||''}${bioTag}</td>
+                        <td class="px-3 py-2 text-slate-500 text-[10px]">${topic||''}</td>
                         <td class="px-3 py-2">
                             <select onchange="updateReviewType(${i},this.value,this)"
                                 class="text-[10px] font-bold px-2 py-1 rounded border w-full"
-                                style="background:${type==='Unit 1'?'#2563eb':'#ea580c'};color:white">
+                                style="background:${type==='Core'?'#2563eb':type==='Extended'?'#ea580c':'#0284c7'};color:white">
                                 ${typeSel}
                             </select>
                         </td>
@@ -4655,12 +4870,9 @@ Return ONLY a valid JSON array. No markdown, no code fences, no extra text befor
                 const cc = document.getElementById('review-core-count');
                 const ec = document.getElementById('review-ext-count');
                 const mc = document.getElementById('review-mixed-count');
-                if (cc) cc.textContent = u1N + ' Unit 1';
-                if (ec) ec.textContent = u2N + ' Unit 2';
-                if (mc) mc.style.display = 'none';
-                // Show the manual re-open button
-                const btn = document.getElementById('review-classifications-btn');
-                if (btn) btn.classList.remove('hidden');
+                if (cc) cc.textContent = coreN + ' Core';
+                if (ec) ec.textContent = extN + ' Extended';
+                if (mc && mixedN > 0) mc.textContent = mixedN + ' Mixed';
             } catch(e) {
                 console.error('[ReviewModal] Error:', e);
                 const tbody = document.getElementById('review-table-body');
